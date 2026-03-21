@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, ShoppingCart, Receipt, Package, Plus } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Receipt, Package, Plus, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const navItems = [
@@ -10,6 +10,7 @@ const navItems = [
   { href: '/products', label: 'Products', icon: Package },
   { href: '/billing', label: '', icon: Plus, isCenter: true },
   { href: '/inventory', label: 'Stock', icon: ShoppingCart },
+  { href: '/customers', label: 'Customers', icon: Users },
   { href: '/history', label: 'Bills', icon: Receipt },
 ];
 
@@ -42,7 +43,7 @@ export function BottomNav() {
               isActive ? 'text-primary' : 'text-slate-400'
             )}
           >
-            <item.icon className="w-5 h-5" />
+            <item.icon className="w-4 h-4" />
             <span className="text-[10px] font-medium">{item.label}</span>
           </Link>
         );

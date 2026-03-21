@@ -8,10 +8,11 @@ interface BillState {
   currentBill: {
     customerName: string;
     phoneNumber: string;
+    customerId: string | null;
     items: BillItem[];
     discountType: 'percentage' | 'flat';
     discountValue: number;
-    paymentMode: PaymentMode;
+    paymentMode: 'Cash' | 'UPI' | 'Card' | 'Credit';
     cashReceived: number;
   };
   isLoading: boolean;
@@ -28,7 +29,7 @@ interface BillState {
   clearCurrentBill: () => void;
   setCustomerInfo: (name: string, phone: string) => void;
   setDiscount: (type: 'percentage' | 'flat', value: number) => void;
-  setPaymentMode: (mode: PaymentMode) => void;
+  setPaymentMode: (mode: 'Cash' | 'UPI' | 'Card' | 'Credit') => void;
   setCashReceived: (amount: number) => void;
   submitBill: () => { success: boolean; invoiceNumber?: string; error?: string };
   getSubtotal: () => number;
@@ -45,6 +46,7 @@ export const useBillStore = create<BillState>()(
       currentBill: {
         customerName: '',
         phoneNumber: '',
+        customerId: null,
         items: [],
         discountType: 'percentage',
         discountValue: 0,
@@ -159,6 +161,7 @@ export const useBillStore = create<BillState>()(
           currentBill: {
             customerName: '',
             phoneNumber: '',
+            customerId: null,
             items: [],
             discountType: 'percentage',
             discountValue: 0,
@@ -190,7 +193,7 @@ export const useBillStore = create<BillState>()(
         });
       },
 
-      setPaymentMode: (mode) => {
+      setPaymentMode: (mode: 'Cash' | 'UPI' | 'Card' | 'Credit') => {
         const { currentBill } = get();
         set({
           currentBill: {
@@ -229,6 +232,7 @@ export const useBillStore = create<BillState>()(
           invoiceNumber,
           customerName: currentBill.customerName || undefined,
           phoneNumber: currentBill.phoneNumber || undefined,
+          customerId: currentBill.customerId || undefined,
           items: currentBill.items,
           subtotal,
           discountType: currentBill.discountType,

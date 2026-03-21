@@ -6,13 +6,17 @@ import { useProductStore } from '@/store/useProductStore';
 import { useBillStore } from '@/store/useBillStore';
 import { useInventoryStore } from '@/store/useInventoryStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import { useCustomerStore } from '@/store/useCustomerStore';
 import { useToast } from '@/components/Toast';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { validateStock } from '@/lib/validateStock';
 import { formatCurrency } from '@/lib/utils';
-import { Search, Plus, Minus, X, Printer, Receipt, CreditCard, Smartphone } from 'lucide-react';
-import { Product, ProductSize, BillItem, StoreSettings } from '@/types';
+import { Search, Plus, Minus, X, Printer, Receipt, CreditCard, Smartphone, AlertTriangle, User } from 'lucide-react';
+import { Product, ProductSize, BillItem, StoreSettings, CustomerWithStats, PaymentMode } from '@/types';
 import { BillSuccessModal } from '@/components/billing/BillSuccessModal';
+import { CustomerSearchDropdown } from '@/components/customers/CustomerSearchDropdown';
+import { QuickAddCustomerModal } from '@/components/customers/QuickAddCustomerModal';
+import { getBalanceStatus, CUSTOMER_TYPES } from '@/lib/constants/customerConstants';
 
 export default function BillingPage() {
   const router = useRouter();
@@ -35,6 +39,7 @@ export default function BillingPage() {
   } = useBillStore();
   const { inventory, initializeFromStorage: initInventory, forceRefresh: refreshInventory, isLoading: inventoryLoading } = useInventoryStore();
   const { addToast } = useToast();
+  const { initialize: initCustomers } = useCustomerStore();
   const { shopName, shopPhone, shopAddress, taxRate, initialize: initSettings } = useSettingsStore();
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,7 +51,7 @@ export default function BillingPage() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [discountType, setDiscountType] = useState<'percentage' | 'flat'>('percentage');
   const [discountValue, setDiscountValue] = useState(0);
-  const [paymentMode, setPaymentModeLocal] = useState<'Cash' | 'UPI' | 'Card'>('Cash');
+  const [paymentMode, setPaymentModeLocal] = useState<PaymentMode>('Cash');
   const [cashReceived, setCashReceivedLocal] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
@@ -62,7 +67,7 @@ export default function BillingPage() {
     discountValue: number;
     discountAmount: number;
     totalAmount: number;
-    paymentMode: 'Cash' | 'UPI' | 'Card';
+    paymentMode: PaymentMode;
     cashReceived: number;
     changeGiven: number;
     createdAt: string;
@@ -92,15 +97,19 @@ export default function BillingPage() {
     };
   }, [shopName, shopPhone, shopAddress, taxRate]);
 
+  // Customer state
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerWithStats | null>(null);
+  const [showAddCustomerModal, setShowAddCustomerModal] = useState(false);
+
   // Initialize with force refresh for inventory (billing needs fresh stock data)
   useEffect(() => {
     const initialize = async () => {
-      await Promise.all([initProducts(), initBills(), initSettings()]);
+      await Promise.all([initProducts(), initBills(), initSettings(), initCustomers()]);
       // Force fresh inventory for billing
       await refreshInventory();
     };
     initialize();
-  }, [initProducts, initBills, initSettings, refreshInventory]);
+  }, [initProducts, initBills, initSettings, initCustomers, refreshInventory]);
 
   // Refetch on focus - 30 second stale time for billing
   const handleInventoryRefetch = useCallback(() => {
@@ -225,6 +234,25 @@ export default function BillingPage() {
       
       // Refresh inventory after successful bill
       refreshInventory();
+      
+      // Update customer stats if customer is linked
+      if (selectedCustomer && result.invoiceNumber) {
+        // Call API to update customer stats
+        try {
+          await fetch(`/api/customers/${selectedCustomer.id}/payments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              amount: billTotal,
+              paymentMode: paymentMode === 'Credit' ? 'Cash' : paymentMode,
+              type: paymentMode === 'Credit' ? 'credit' : 'payment',
+              note: `Bill #${result.invoiceNumber}`,
+            }),
+          });
+        } catch (error) {
+          console.error('Failed to update customer stats:', error);
+        }
+      }
     } else {
       addToast('error', result.error || 'Failed to generate bill');
     }
@@ -251,6 +279,7 @@ export default function BillingPage() {
     setSelectedSize(null);
     setQuantity(1);
     setSearchQuery('');
+    setSelectedCustomer(null);
     
     // Reset modal state
     setShowSuccessModal(false);
@@ -259,6 +288,23 @@ export default function BillingPage() {
     
     addToast('success', 'Ready for new bill');
   };
+
+  // Handle customer selection
+  const handleCustomerSelect = (customer: CustomerWithStats | null) => {
+    setSelectedCustomer(customer);
+    if (customer) {
+      setCustomerName(customer.name);
+      setPhoneNumber(customer.phone || '');
+    } else {
+      setCustomerName('');
+      setPhoneNumber('');
+    }
+  };
+
+  // Get customer balance status
+  const customerBalanceStatus = selectedCustomer 
+    ? getBalanceStatus(selectedCustomer.outstandingBalance, selectedCustomer.creditLimit)
+    : null;
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 no-print">
@@ -283,22 +329,56 @@ export default function BillingPage() {
           {/* Customer Details */}
           <div className="bg-white p-4 rounded-xl border border-slate-200">
             <h3 className="text-sm font-bold uppercase tracking-wider mb-3">Customer Details</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                type="text"
-                placeholder="Customer Name"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm"
+            
+            {selectedCustomer ? (
+              <div className="space-y-3">
+                {/* Selected Customer Info */}
+                <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                      <User className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">{selectedCustomer.name}</p>
+                      <p className="text-xs text-slate-500">{selectedCustomer.phone || 'No phone'}</p>
+                    </div>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-full font-bold border ${
+                    CUSTOMER_TYPES[selectedCustomer.customerType]?.badgeColor || CUSTOMER_TYPES.regular.badgeColor
+                  }`}>
+                    {CUSTOMER_TYPES[selectedCustomer.customerType]?.label || 'Regular'}
+                  </span>
+                </div>
+                
+                {/* Balance Warning */}
+                {customerBalanceStatus && customerBalanceStatus !== 'clear' && (
+                  <div className={`flex items-center gap-2 p-3 rounded-lg text-sm ${
+                    customerBalanceStatus === 'over_limit' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'
+                  }`}>
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>
+                      {customerBalanceStatus === 'over_limit' 
+                        ? `Over credit limit! Outstanding: ${formatCurrency(selectedCustomer.outstandingBalance)}`
+                        : `Has outstanding balance: ${formatCurrency(selectedCustomer.outstandingBalance)}`
+                      }
+                    </span>
+                  </div>
+                )}
+                
+                <button
+                  onClick={() => handleCustomerSelect(null)}
+                  className="text-xs text-slate-500 hover:text-primary"
+                >
+                  Change Customer
+                </button>
+              </div>
+            ) : (
+              <CustomerSearchDropdown
+                onSelect={handleCustomerSelect}
+                selectedCustomer={null}
+                onAddNew={() => setShowAddCustomerModal(true)}
               />
-              <input
-                type="tel"
-                placeholder="Phone Number"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm"
-              />
-            </div>
+            )}
           </div>
 
           {/* Product Search */}
@@ -533,6 +613,19 @@ export default function BillingPage() {
                   Card
                 </span>
               </button>
+              <button
+                onClick={() => setPaymentModeLocal('Credit')}
+                className={`flex-1 py-3 border-2 rounded-xl flex flex-col items-center gap-1 transition-colors ${
+                  paymentMode === 'Credit'
+                    ? 'border-amber-500 bg-amber-50'
+                    : 'border-slate-200 bg-slate-50'
+                }`}
+              >
+                <CreditCard className={`w-5 h-5 ${paymentMode === 'Credit' ? 'text-amber-600' : 'text-slate-400'}`} />
+                <span className={`text-[10px] font-bold uppercase ${paymentMode === 'Credit' ? 'text-amber-600' : 'text-slate-400'}`}>
+                  Credit
+                </span>
+              </button>
             </div>
 
             {/* Cash Received (only for Cash mode) */}
@@ -575,6 +668,7 @@ export default function BillingPage() {
             invoiceNumber: billDetails.invoiceNumber,
             customerName: billDetails.customerName || undefined,
             phoneNumber: billDetails.phoneNumber || undefined,
+            customerId: selectedCustomer?.id,
             items: savedBill,
             subtotal: billDetails.subtotal,
             discountType: billDetails.discountType,
@@ -593,6 +687,17 @@ export default function BillingPage() {
           onNewBill={handleNewBill}
         />
       )}
+      
+      {/* Quick Add Customer Modal */}
+      <QuickAddCustomerModal
+        isOpen={showAddCustomerModal}
+        onClose={() => setShowAddCustomerModal(false)}
+        onSuccess={(customer) => {
+          handleCustomerSelect(customer as CustomerWithStats);
+          setShowAddCustomerModal(false);
+          addToast('success', 'Customer added successfully');
+        }}
+      />
     </div>
   );
 }

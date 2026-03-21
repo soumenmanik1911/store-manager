@@ -71,7 +71,7 @@ export interface StockHistoryEntry {
 }
 
 // Billing related types
-export type PaymentMode = 'Cash' | 'UPI' | 'Card';
+export type PaymentMode = 'Cash' | 'UPI' | 'Card' | 'Credit';
 
 export interface BillItem {
   id: string;
@@ -90,6 +90,8 @@ export interface Bill {
   invoiceNumber: string;
   customerName?: string;
   phoneNumber?: string;
+  customerId?: string;
+  customerType?: CustomerType;
   items: BillItem[];
   subtotal: number;
   discountType: 'percentage' | 'flat';
@@ -128,4 +130,77 @@ export interface DashboardStats {
   lowStockAlerts: number;
   yesterdaySales?: number;
   yesterdayBills?: number;
+}
+
+// ============================================================================
+// CUSTOMER TYPES
+// ============================================================================
+export type CustomerType = 'regular' | 'wholesale' | 'vip';
+
+export type CustomerPaymentType = 'payment' | 'refund' | 'credit';
+
+export interface Customer {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
+  creditLimit: number;
+  totalPurchases: number;
+  totalPaid: number;
+  outstandingBalance: number;
+  customerType: CustomerType;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CustomerPayment {
+  id: string;
+  customerId: string;
+  amount: number;
+  paymentMode: PaymentMode;
+  type: CustomerPaymentType;
+  note?: string;
+  billId?: string;
+  createdAt: string;
+}
+
+export interface CustomerWithStats extends Customer {
+  totalBills: number;
+  averageBillValue: number;
+  lastPurchaseDate?: string;
+}
+
+export interface CustomerSummary {
+  id: string;
+  name: string;
+  phone?: string;
+  customerType: CustomerType;
+  outstandingBalance: number;
+}
+
+export interface CustomerReport {
+  id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+  customerType: CustomerType;
+  totalPurchases: number;
+  totalPaid: number;
+  outstandingBalance: number;
+  creditLimit: number;
+  totalBills: number;
+  lastPurchaseDate?: string;
+  memberSince: string;
+}
+
+export interface CustomerSalesReport {
+  customerName: string;
+  totalBills: number;
+  totalAmount: number;
+  averageBill: number;
+  lastPurchase: string;
 }

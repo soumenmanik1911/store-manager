@@ -20,8 +20,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'FrostyFlow - Cold Drinks POS System',
-  description: 'Cold Drinks Store POS & Inventory Management System',
+  title: 'Cold Drinks POS System',
+  description: 'POS & Inventory Management System',
 };
 
 export default function RootLayout({

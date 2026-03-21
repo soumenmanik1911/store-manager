@@ -35,7 +35,7 @@ export function Header() {
             <IceCream className="w-5 h-5" />
           </div>
           <h1 className="text-lg font-bold text-slate-900">
-            {mounted ? shopName : 'FrostyFlow'}
+            {mounted ? shopName : 'Store'}
           </h1>
         </div>
 

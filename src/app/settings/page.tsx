@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { useToast } from '@/components/Toast';
-import { Settings, Store, User, Save } from 'lucide-react';
+import { Settings, Store, User, Save, Download, Package, ShoppingCart, Receipt, Users } from 'lucide-react';
+import { downloadCSV, downloadAllData } from '@/lib/exportData';
 
 export default function SettingsPage() {
   const { 
@@ -16,7 +17,9 @@ export default function SettingsPage() {
     setOwnerName, 
     setShopPhone, 
     setShopAddress, 
-    setTaxRate 
+    setTaxRate,
+    saveAllSettings,
+    initialize
   } = useSettingsStore();
   const { addToast } = useToast();
   
@@ -28,6 +31,11 @@ export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
+    // Initialize settings from API on mount
+    initialize();
+  }, [initialize]);
+
+  useEffect(() => {
     setLocalShopName(shopName);
     setLocalOwnerName(ownerName);
     setLocalShopPhone(shopPhone);
@@ -35,15 +43,41 @@ export default function SettingsPage() {
     setLocalTaxRate(taxRate);
   }, [shopName, ownerName, shopPhone, shopAddress, taxRate]);
 
-  const handleSave = () => {
+  // Update browser tab title dynamically
+  useEffect(() => {
+    document.title = `${shopName || 'Store'} - Settings`;
+  }, [shopName]);
+
+  const handleSave = async () => {
     setIsSaving(true);
-    setShopName(localShopName);
-    setOwnerName(localOwnerName);
-    setShopPhone(localShopPhone);
-    setShopAddress(localShopAddress);
-    setTaxRate(localTaxRate);
-    addToast('success', 'Settings saved successfully');
-    setIsSaving(false);
+    try {
+      // Update store state first
+      setShopName(localShopName);
+      setOwnerName(localOwnerName);
+      setShopPhone(localShopPhone);
+      setShopAddress(localShopAddress);
+      setTaxRate(localTaxRate);
+      
+      // Then save to API (database)
+      await saveAllSettings();
+      
+      addToast('success', 'Settings saved successfully');
+    } catch (error) {
+      console.error('Error saving settings:', error);
+      addToast('error', 'Failed to save settings');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleExport = async (type: string) => {
+    try {
+      await downloadCSV(type);
+      addToast('success', `${type} exported successfully`);
+    } catch (error) {
+      console.error('Export error:', error);
+      addToast('error', 'Failed to export data');
+    }
   };
 
   return (
@@ -141,6 +175,62 @@ export default function SettingsPage() {
         <Save className="w-5 h-5" />
         {isSaving ? 'Saving...' : 'Save Settings'}
       </button>
+
+      {/* Data Export Section */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
+        <h2 className="font-bold flex items-center gap-2">
+          <Download className="w-5 h-5" />
+          Data Export
+        </h2>
+        <p className="text-sm text-slate-500">
+          Download your store data as CSV files for backup or analysis
+        </p>
+        
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            onClick={() => handleExport('products')}
+            className="flex items-center gap-2 px-4 py-2 border border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors text-sm font-medium"
+          >
+            <Package className="w-4 h-4" />
+            Products
+          </button>
+          <button
+            onClick={() => handleExport('inventory')}
+            className="flex items-center gap-2 px-4 py-2 border border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors text-sm font-medium"
+          >
+            <ShoppingCart className="w-4 h-4" />
+            Inventory
+          </button>
+          <button
+            onClick={() => handleExport('bills')}
+            className="flex items-center gap-2 px-4 py-2 border border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors text-sm font-medium"
+          >
+            <Receipt className="w-4 h-4" />
+            Bills
+          </button>
+          <button
+            onClick={() => handleExport('customers')}
+            className="flex items-center gap-2 px-4 py-2 border border-primary text-primary rounded-lg hover:bg-primary/5 transition-colors text-sm font-medium"
+          >
+            <Users className="w-4 h-4" />
+            Customers
+          </button>
+        </div>
+        
+        <button
+          onClick={() => {
+            downloadAllData().then(() => {
+              addToast('success', 'All data exported successfully');
+            }).catch(() => {
+              addToast('error', 'Failed to export all data');
+            });
+          }}
+          className="w-full bg-primary hover:bg-primary/90 text-white py-2 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors"
+        >
+          <Download className="w-4 h-4" />
+          Download All Data
+        </button>
+      </div>
     </div>
   );
 }

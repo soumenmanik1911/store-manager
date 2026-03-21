@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
 import * as storage from '@/lib/storage';
 
 interface SettingsState {
@@ -24,8 +23,7 @@ interface SettingsState {
 }
 
 export const useSettingsStore = create<SettingsState>()(
-  persist(
-    (set, get) => ({
+  (set, get) => ({
       shopName: 'FrostyFlow',
       ownerName: '',
       shopPhone: '',
@@ -92,15 +90,14 @@ export const useSettingsStore = create<SettingsState>()(
             currency: 'INR',
             lowStockDefaultThreshold: 50,
           });
+          
+          // Invalidate cache to force fresh fetch
+          set({ lastSyncedAt: new Date() });
         } catch (error) {
           console.error('Error saving settings:', error);
           throw error;
         }
       },
-    }),
-    {
-      name: 'frostyflow-settings',
-      storage: createJSONStorage(() => localStorage),
-    }
-  )
-);
+    })
+  );
+

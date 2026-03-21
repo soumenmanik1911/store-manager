@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { bills, billItems, invoiceCounter, inventory, stockHistory, productSizes, products } from '@/lib/db/schema';
+import { bills, billItems, invoiceCounter, inventory, stockHistory, productSizes, products, customers, customerPayments } from '@/lib/db/schema';
 import { sql, eq } from 'drizzle-orm';
 
 // Helper to parse PostgreSQL decimal strings to numbers
@@ -67,6 +67,7 @@ export async function POST(request: Request) {
     const {
       customerName,
       customerPhone,
+      customerId,
       items,
       subtotal,
       discountType,
@@ -101,6 +102,7 @@ export async function POST(request: Request) {
       invoiceNumber,
       customerName: customerName || null,
       customerPhone: customerPhone || null,
+      customerId: customerId || null,
       subtotal: subtotal.toString(),
       discountType: discountType || 'percentage',
       discountValue: discountValue?.toString() || '0',
@@ -222,11 +224,63 @@ export async function POST(request: Request) {
     }
     
     // ========================================
+    // CUSTOMER STATS UPDATE (in transaction)
+    // ========================================
+    if (customerId) {
+      try {
+        // Use transaction to ensure bill + customer stats are consistent
+        await db.transaction(async (tx) => {
+          // Find the customer
+          const [customer] = await tx.select().from(customers).where(eq(customers.id, customerId));
+          
+          if (customer) {
+            // Parse current values
+            const currentTotalPurchases = parseFloat(customer.totalPurchases || '0') || 0;
+            const currentOutstanding = parseFloat(customer.outstandingBalance || '0') || 0;
+            const currentTotalPaid = parseFloat(customer.totalPaid || '0') || 0;
+            
+            // Calculate new values
+            const newTotalPurchases = currentTotalPurchases + totalAmount;
+            let newOutstanding = currentOutstanding;
+            let newTotalPaid = currentTotalPaid;
+            
+            // If credit payment, increase outstanding
+            if (paymentMode === 'Credit') {
+              newOutstanding = currentOutstanding + totalAmount;
+            }
+            
+            // Update customer stats
+            await tx.update(customers)
+              .set({
+                totalPurchases: newTotalPurchases.toString(),
+                outstandingBalance: newOutstanding.toString(),
+                totalPaid: newTotalPaid.toString(),
+                updatedAt: new Date(),
+              })
+              .where(eq(customers.id, customerId));
+            
+            // Create customer payment record
+            await tx.insert(customerPayments).values({
+              customerId: customerId,
+              amount: totalAmount.toString(),
+              paymentMode: paymentMode === 'Credit' ? 'Cash' : paymentMode,
+              type: paymentMode === 'Credit' ? 'credit' : 'payment',
+              note: `Bill #${invoiceNumber}`,
+              billId: newBill.id,
+            });
+            
+            console.log('✅ Customer stats updated for:', customer.name);
+          }
+        });
+      } catch (error) {
+        console.error('❌ Failed to update customer stats:', error);
+        // Don't fail the bill if customer update fails
+      }
+    }
+    
+    // ========================================
     // CACHE INVALIDATION
     // ========================================
-    // Import and call cache invalidation
-    // Note: In a real implementation, you'd call a cache invalidation function
-    // For now, the Next.js API route cache will be invalidated on next fetch
     console.log('✅ Stock deduction completed for all items');
     
     return NextResponse.json({

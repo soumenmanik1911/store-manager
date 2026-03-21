@@ -273,7 +273,7 @@ export async function getSettings(): Promise<StoreSettings> {
   const settings = await response.json();
   
   return {
-    shopName: settings.shopName || 'FrostyFlow',
+    shopName: settings.shopName || 'My Store',
     ownerName: settings.ownerName || '',
     shopAddress: settings.shopAddress || '',
     shopPhone: settings.shopPhone || '',

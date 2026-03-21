@@ -1,6 +1,7 @@
 'use client';
 
 import { Bill, StoreSettings } from '@/types';
+import { CUSTOMER_TYPES } from '@/lib/constants/customerConstants';
 
 interface BillReceiptProps {
   bill: Bill;
@@ -49,6 +50,7 @@ export function BillReceipt({ bill, settings }: BillReceiptProps) {
         padding: '24px',
         fontFamily: '"Plus Jakarta Sans", sans-serif',
         backgroundColor: '#ffffff',
+        position: 'relative',
       }}
     >
       {/* Shop Name */}
@@ -120,16 +122,36 @@ export function BillReceipt({ bill, settings }: BillReceiptProps) {
       {(bill.customerName || bill.phoneNumber) && (
         <>
           <div style={{ marginBottom: '16px' }}>
-            {bill.customerName && (
-              <p style={{ fontSize: '14px', marginBottom: '4px' }}>
-                Customer: {bill.customerName}
-              </p>
-            )}
-            {bill.phoneNumber && (
-              <p style={{ fontSize: '12px', color: '#6b7280' }}>
-                Phone: {bill.phoneNumber}
-              </p>
-            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                {bill.customerName && (
+                  <p style={{ fontSize: '14px', marginBottom: '4px', fontWeight: 600 }}>
+                    Customer: {bill.customerName}
+                  </p>
+                )}
+                {bill.phoneNumber && (
+                  <p style={{ fontSize: '12px', color: '#6b7280' }}>
+                    Phone: {bill.phoneNumber}
+                  </p>
+                )}
+              </div>
+              {/* Show type badge for VIP/Wholesale */}
+              {bill.customerType && (bill.customerType === 'vip' || bill.customerType === 'wholesale') && (
+                <span
+                  style={{
+                    fontSize: '10px',
+                    padding: '2px 8px',
+                    borderRadius: '9999px',
+                    fontWeight: 600,
+                    backgroundColor: bill.customerType === 'vip' ? '#fef3c7' : '#dbeafe',
+                    color: bill.customerType === 'vip' ? '#b45309' : '#1d4ed8',
+                    border: `1px solid ${bill.customerType === 'vip' ? '#fcd34d' : '#93c5fd'}`,
+                  }}
+                >
+                  {CUSTOMER_TYPES[bill.customerType]?.label || bill.customerType.toUpperCase()}
+                </span>
+              )}
+            </div>
           </div>
           <div
             style={{
@@ -355,11 +377,68 @@ export function BillReceipt({ bill, settings }: BillReceiptProps) {
           style={{
             fontFamily: '"Geist Mono", monospace',
             fontSize: '12px',
+            color: bill.paymentMode === 'Credit' ? '#dc2626' : undefined,
+            fontWeight: bill.paymentMode === 'Credit' ? 700 : undefined,
           }}
         >
           {bill.paymentMode}
         </span>
       </div>
+
+      {/* CREDIT SALE Stamp */}
+      {bill.paymentMode === 'Credit' && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%) rotate(-15deg)',
+            border: '3px solid #dc2626',
+            padding: '8px 24px',
+            borderRadius: '4px',
+            opacity: 0.3,
+          }}
+        >
+          <span
+            style={{
+              fontSize: '24px',
+              fontWeight: 800,
+              color: '#dc2626',
+              letterSpacing: '2px',
+            }}
+          >
+            CREDIT SALE
+          </span>
+        </div>
+      )}
+
+      {/* Outstanding Balance for Credit */}
+      {bill.paymentMode === 'Credit' && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            marginBottom: '8px',
+            padding: '8px',
+            backgroundColor: '#fef2f2',
+            borderRadius: '4px',
+          }}
+        >
+          <span style={{ fontSize: '12px', color: '#dc2626', fontWeight: 600 }}>
+            Credit Amount Added
+          </span>
+          <span
+            style={{
+              fontFamily: '"Geist Mono", monospace',
+              fontSize: '12px',
+              color: '#dc2626',
+              fontWeight: 700,
+            }}
+          >
+            {formatCurrency(Number(bill.totalAmount))}
+          </span>
+        </div>
+      )}
 
       {/* Cash Received (only for Cash payments) */}
       {bill.paymentMode === 'Cash' && bill.cashReceived && (

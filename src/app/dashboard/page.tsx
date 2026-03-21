@@ -5,6 +5,7 @@ import { Header } from '@/components/layout/Header';
 import { useProductStore } from '@/store/useProductStore';
 import { useBillStore } from '@/store/useBillStore';
 import { useInventoryStore } from '@/store/useInventoryStore';
+import { useSettingsStore } from '@/store/useSettingsStore';
 import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { formatCurrency, formatDate, calculatePercentageChange, toNumber } from '@/lib/utils';
 import { 
@@ -74,8 +75,14 @@ export default function DashboardPage() {
   const { products, forceRefresh: refreshProducts } = useProductStore();
   const { bills, forceRefresh: refreshBills } = useBillStore();
   const { inventory, forceRefresh: refreshInventory } = useInventoryStore();
+  const { shopName } = useSettingsStore();
   const [isLoading, setIsLoading] = useState(true);
   const [salesData, setSalesData] = useState<{ date: string; total: number }[]>([]);
+
+  // Update browser tab title dynamically
+  useEffect(() => {
+    document.title = `${shopName || 'Store'} - Dashboard`;
+  }, [shopName]);
 
   // Dashboard always fetches fresh stats - bypass cache
   useEffect(() => {

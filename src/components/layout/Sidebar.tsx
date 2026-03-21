@@ -9,20 +9,31 @@ import {
   Package, 
   BarChart3, 
   Settings,
-  IceCream
+  IceCream,
+  Users
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useSettingsStore } from '@/store/useSettingsStore';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/billing', label: 'Billing', icon: Receipt },
   { href: '/products', label: 'Products', icon: Package },
   { href: '/inventory', label: 'Inventory', icon: ShoppingCart },
+  { href: '/customers', label: 'Customers', icon: Users },
   { href: '/history', label: 'History', icon: BarChart3 },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { shopName } = useSettingsStore();
+
+  const getShopInitial = () => {
+    if (shopName && shopName.length > 0) {
+      return shopName.charAt(0).toUpperCase();
+    }
+    return 'S';
+  };
 
   return (
     <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-200 p-6 sticky top-0 h-screen">
@@ -31,7 +42,7 @@ export function Sidebar() {
         <div className="bg-primary p-2 rounded-lg text-white">
           <IceCream className="w-6 h-6" />
         </div>
-        <h1 className="text-xl font-bold tracking-tight">FrostyFlow</h1>
+        <h1 className="text-xl font-bold tracking-tight">{shopName || 'Store'}</h1>
       </div>
 
       {/* Navigation */}
