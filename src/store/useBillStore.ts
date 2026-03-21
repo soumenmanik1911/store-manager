@@ -16,9 +16,11 @@ interface BillState {
   };
   isLoading: boolean;
   error: string | null;
+  lastSyncedAt: Date | null;
   
   // Actions
   initialize: () => Promise<void>;
+  forceRefresh: () => Promise<void>;
   initializeFromStorage: () => Promise<void>;
   addItem: (item: BillItem) => void;
   updateItemQuantity: (itemId: string, quantity: number) => void;
@@ -51,15 +53,27 @@ export const useBillStore = create<BillState>()(
       },
       isLoading: false,
       error: null,
+      lastSyncedAt: null,
 
       initialize: async () => {
         set({ isLoading: true, error: null });
         try {
           const bills = await storage.getBills();
-          set({ bills, isLoading: false });
+          set({ bills, isLoading: false, lastSyncedAt: new Date() });
         } catch (error) {
           console.error('Error initializing bills:', error);
           set({ isLoading: false, error: 'Failed to load bills' });
+        }
+      },
+
+      forceRefresh: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const bills = await storage.getBills(true); // Force fresh from Neon
+          set({ bills, isLoading: false, lastSyncedAt: new Date() });
+        } catch (error) {
+          console.error('Error force refreshing bills:', error);
+          set({ isLoading: false, error: 'Failed to refresh bills' });
         }
       },
 

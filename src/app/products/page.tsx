@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useProductStore, addSampleProducts } from '@/store/useProductStore';
+import { useInventoryStore } from '@/store/useInventoryStore';
 import { useToast } from '@/components/Toast';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { formatCurrency } from '@/lib/utils';
 import { Search, Plus, Edit, Trash2, Package, ImagePlus } from 'lucide-react';
 import { Product, ProductCategory, ProductSize } from '@/types';
@@ -20,8 +22,10 @@ export default function ProductsPage() {
     updateProduct,
     deleteProduct,
     getFilteredProducts,
-    initializeFromStorage 
+    initializeFromStorage,
+    forceRefresh: refreshProducts
   } = useProductStore();
+  const { forceRefresh: refreshInventory } = useInventoryStore();
   const { addToast } = useToast();
   
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -41,6 +45,16 @@ export default function ProductsPage() {
     initializeFromStorage();
     setIsLoading(false);
   }, [initializeFromStorage]);
+
+  // Refetch on focus
+  const handleProductsRefetch = useCallback(() => {
+    return refreshProducts();
+  }, [refreshProducts]);
+  
+  useRefetchOnFocus({
+    onRefetch: handleProductsRefetch,
+    staleTime: 60000, // 60 seconds
+  });
 
   // Add sample products if empty
   useEffect(() => {
@@ -76,9 +90,11 @@ export default function ProductsPage() {
     setIsAddModalOpen(true);
   };
 
-  const handleDeleteProduct = (id: string) => {
+  const handleDeleteProduct = async (id: string) => {
     if (confirm('Are you sure you want to delete this product?')) {
-      deleteProduct(id);
+      await deleteProduct(id);
+      // Refresh both products and inventory after delete
+      await Promise.all([refreshProducts(), refreshInventory()]);
       addToast('success', 'Product deleted');
     }
   };
@@ -115,7 +131,7 @@ export default function ProductsPage() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!formData.name || !formData.brand || formData.sizes.length === 0) {
@@ -124,12 +140,15 @@ export default function ProductsPage() {
     }
 
     if (editingProduct) {
-      updateProduct(editingProduct.id, formData);
+      await updateProduct(editingProduct.id, formData);
       addToast('success', 'Product updated');
     } else {
-      addProduct(formData);
+      await addProduct(formData);
       addToast('success', 'Product added');
     }
+
+    // Refresh both products and inventory after add/edit
+    await Promise.all([refreshProducts(), refreshInventory()]);
 
     setIsAddModalOpen(false);
     setEditingProduct(null);

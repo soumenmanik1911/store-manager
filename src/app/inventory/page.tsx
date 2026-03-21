@@ -1,9 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useProductStore, addSampleProducts } from '@/store/useProductStore';
 import { useInventoryStore } from '@/store/useInventoryStore';
 import { useToast } from '@/components/Toast';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
+import { DataFreshness } from '@/components/ui/DataFreshness';
 import { Search, Plus, Package, AlertCircle, CheckCircle, XCircle, Filter, Pin, Trash2 } from 'lucide-react';
 import { Product, SKU, StockStatus } from '@/types';
 
@@ -31,7 +33,10 @@ export default function InventoryPage() {
     removeSku,
     getFilteredInventory,
     getInventoryStats,
-    initializeFromStorage: initInventory
+    initializeFromStorage: initInventory,
+    forceRefresh,
+    isLoading: inventoryLoading,
+    lastSyncedAt
   } = useInventoryStore();
   const { addToast } = useToast();
   
@@ -53,6 +58,16 @@ export default function InventoryPage() {
     };
     initialize();
   }, [initProducts, initInventory]);
+
+  // Refetch on focus - 60 second stale time
+  const handleInventoryRefetch = useCallback(() => {
+    return forceRefresh();
+  }, [forceRefresh]);
+  
+  useRefetchOnFocus({
+    onRefetch: handleInventoryRefetch,
+    staleTime: 60000, // 60 seconds
+  });
 
   // Add sample products if inventory is empty
   useEffect(() => {
@@ -172,6 +187,11 @@ export default function InventoryPage() {
             <p className="text-sm text-slate-500">Manage your beverage stock and SKUs</p>
           </div>
         </div>
+        <DataFreshness 
+          lastSyncedAt={lastSyncedAt} 
+          onRefresh={forceRefresh}
+          isLoading={inventoryLoading}
+        />
       </header>
 
       {/* Stats Cards */}
@@ -182,7 +202,7 @@ export default function InventoryPage() {
           </div>
           <div>
             <p className="text-sm text-slate-500">Healthy Stock</p>
-            <p className="text-2xl font-bold font-mono">{stats.healthy} SKUs</p>
+            <p className="text-2xl font-bold font-mono">{stats.healthy} products</p>
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center gap-4">
@@ -191,7 +211,7 @@ export default function InventoryPage() {
           </div>
           <div>
             <p className="text-sm text-slate-500">Low Stock</p>
-            <p className="text-2xl font-bold font-mono">{stats.lowStock} SKUs</p>
+            <p className="text-2xl font-bold font-mono">{stats.lowStock} products</p>
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center gap-4">
@@ -200,7 +220,7 @@ export default function InventoryPage() {
           </div>
           <div>
             <p className="text-sm text-slate-500">Out of Stock</p>
-            <p className="text-2xl font-bold font-mono">{stats.outOfStock} SKUs</p>
+            <p className="text-2xl font-bold font-mono">{stats.outOfStock} products</p>
           </div>
         </div>
       </div>
@@ -251,8 +271,6 @@ export default function InventoryPage() {
             <tbody className="divide-y divide-slate-100">
               {filteredInventory.length > 0 ? (
                 filteredInventory.map((sku) => {
-                  const product = getProductForSku(sku.productId);
-                  const size = getSizeForSku(sku.productId, sku.sizeId);
                   const isPinned = pinnedSkus.includes(sku.id);
                   
                   return (
@@ -260,32 +278,32 @@ export default function InventoryPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="size-10 rounded bg-slate-100 flex items-center justify-center overflow-hidden">
-                            {product?.image ? (
-                              <img src={product.image} alt={product.name} className="object-cover size-full" />
+                            {sku.imageUrl ? (
+                              <img src={sku.imageUrl} alt={sku.productName} className="object-cover size-full" />
                             ) : (
                               <Package className="w-5 h-5 text-slate-400" />
                             )}
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <p className="font-semibold text-sm">{product?.name || 'Unknown'}</p>
+                              <p className="font-semibold text-sm">{sku.productName || 'Unknown'}</p>
                               {isPinned && (
                                 <span className="size-5 rounded-full bg-primary/10 flex items-center justify-center">
                                   <Pin className="w-3 h-3 text-primary fill-current" />
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs text-slate-500">{product?.brand}</p>
+                            <p className="text-xs text-slate-500">{sku.brand || 'Unknown'}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm">{size?.name || 'Unknown'}</td>
+                      <td className="px-6 py-4 text-sm">{sku.sizeName || 'Unknown'}</td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className="text-sm font-bold font-mono">{sku.currentStock} Bottles</span>
-                          {size && (
+                          {sku.bottlesPerCarton && (
                             <span className="text-xs text-slate-400 font-mono">
-                              {Math.floor(sku.currentStock / size.bottlesPerCarton)} Cartons
+                              {Math.floor(sku.currentStock / sku.bottlesPerCarton)} Cartons
                             </span>
                           )}
                         </div>
@@ -348,8 +366,6 @@ export default function InventoryPage() {
       <div className="lg:hidden space-y-3">
         {filteredInventory.length > 0 ? (
           filteredInventory.map((sku) => {
-            const product = getProductForSku(sku.productId);
-            const size = getSizeForSku(sku.productId, sku.sizeId);
             const isPinned = pinnedSkus.includes(sku.id);
             
             return (
@@ -357,22 +373,22 @@ export default function InventoryPage() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="size-12 rounded bg-slate-100 flex items-center justify-center overflow-hidden">
-                      {product?.image ? (
-                        <img src={product.image} alt={product.name} className="object-cover size-full" />
+                      {sku.imageUrl ? (
+                        <img src={sku.imageUrl} alt={sku.productName} className="object-cover size-full" />
                       ) : (
                         <Package className="w-6 h-6 text-slate-400" />
                       )}
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <p className="text-base font-semibold">{product?.name || 'Unknown'}</p>
+                        <p className="text-base font-semibold">{sku.productName || 'Unknown'}</p>
                         {isPinned && (
                           <span className="size-5 rounded-full bg-primary/10 flex items-center justify-center">
                             <Pin className="w-3 h-3 text-primary fill-current" />
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-slate-500">{product?.brand}</p>
+                      <p className="text-sm text-slate-500">{sku.brand || 'Unknown'}</p>
                     </div>
                   </div>
                   <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(sku.status)}`}>
@@ -384,13 +400,13 @@ export default function InventoryPage() {
                 <div className="flex items-center gap-4 mb-4">
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs text-slate-500">Size:</span>
-                    <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">{size?.name || 'Unknown'}</span>
+                    <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-medium">{sku.sizeName || 'Unknown'}</span>
                   </div>
                   <div className="flex-1">
                     <span className="text-lg font-bold font-mono">{sku.currentStock}</span>
                     <span className="text-sm text-slate-500"> bottles</span>
-                    {size && (
-                      <span className="text-xs text-slate-400 font-mono"> ({Math.floor(sku.currentStock / size.bottlesPerCarton)} cartons)</span>
+                    {sku.bottlesPerCarton && (
+                      <span className="text-xs text-slate-400 font-mono"> ({Math.floor(sku.currentStock / sku.bottlesPerCarton)} cartons)</span>
                     )}
                   </div>
                 </div>
@@ -453,7 +469,7 @@ export default function InventoryPage() {
               <div>
                 <p className="text-xs font-bold text-slate-500 uppercase mb-1">Product</p>
                 <p className="font-medium text-base">
-                  {getProductForSku(selectedSku.productId)?.name} - {getSizeForSku(selectedSku.productId, selectedSku.sizeId)?.name}
+                  {selectedSku.productName || 'Unknown'} - {selectedSku.sizeName || 'Unknown'}
                 </p>
               </div>
               <div>

@@ -64,12 +64,12 @@ export const inventory = pgTable('inventory', {
 export const stockHistory = pgTable('stock_history', {
   id: uuid('id').primaryKey().defaultRandom(),
   inventoryId: uuid('inventory_id').references(() => inventory.id, { onDelete: 'cascade' }).notNull(),
-  productId: uuid('product_id').references(() => products.id, { onDelete: 'cascade' }).notNull(),
+  productId: uuid('product_id').references(() => products.id, { onDelete: 'set null' }),
   type: varchar('type', { length: 20 }).notNull(),
   quantity: integer('quantity').notNull(),
   previousStock: integer('previous_stock').notNull(),
   newStock: integer('new_stock').notNull(),
-  billId: uuid('bill_id'),
+  billId: uuid('bill_id').references(() => bills.id, { onDelete: 'set null' }),
   note: text('note'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
 });
@@ -100,7 +100,7 @@ export const bills = pgTable('bills', {
 export const billItems = pgTable('bill_items', {
   id: uuid('id').primaryKey().defaultRandom(),
   billId: uuid('bill_id').references(() => bills.id, { onDelete: 'cascade' }).notNull(),
-  productSizeId: uuid('product_size_id').references(() => productSizes.id),
+  productSizeId: uuid('product_size_id').references(() => productSizes.id, { onDelete: 'set null' }),
   productName: varchar('product_name', { length: 255 }).notNull(),
   sizeName: varchar('size_name', { length: 50 }).notNull(),
   packaging: varchar('packaging', { length: 20 }).notNull(),

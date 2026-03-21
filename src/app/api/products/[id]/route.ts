@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { products, productSizes, inventory } from '@/lib/db/schema';
+import { products, productSizes, inventory, stockHistory, billItems } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 export async function GET(
   request: Request,
@@ -83,16 +84,62 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    console.log('🗑️ DELETE Product - ID:', id);
     
-    // Delete product (sizes and inventory will cascade)
+    // First, get all product sizes for this product
+    const sizes = await db.select().from(productSizes).where(
+      // @ts-ignore
+      eq(productSizes.productId, id)
+    );
+    console.log('📋 Found sizes:', sizes.length);
+    
+    // For each size, find and clear related records
+    for (const size of sizes) {
+      // Clear bill_items references to this size (set null)
+      await db.update(billItems)
+        .set({ productSizeId: null })
+        .where(
+          // @ts-ignore
+          eq(billItems.productSizeId, size.id)
+        );
+      console.log('✅ Cleared bill_items for size:', size.id);
+      
+      // Delete inventory for this size
+      await db.delete(inventory).where(
+        // @ts-ignore
+        eq(inventory.productSizeId, size.id)
+      );
+      console.log('✅ Deleted inventory for size:', size.id);
+      
+      // Delete stock history for this product
+      await db.delete(stockHistory).where(
+        // @ts-ignore
+        eq(stockHistory.productId, id)
+      );
+      console.log('✅ Deleted stock_history for product:', id);
+    }
+    
+    // Delete product sizes
+    await db.delete(productSizes).where(
+      // @ts-ignore
+      eq(productSizes.productId, id)
+    );
+    console.log('✅ Deleted product_sizes');
+    
+    // Finally, delete the product
     await db.delete(products).where(
       // @ts-ignore
-      products.id.eq(id)
+      eq(products.id, id)
     );
+    console.log('✅ Deleted product:', id);
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting product:', error);
-    return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 });
+    console.error('❌ DELETE Product Error:', error);
+    console.error('❌ Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+    return NextResponse.json({ 
+      error: 'Failed to delete product', 
+      details: String(error) 
+    }, { status: 500 });
   }
 }

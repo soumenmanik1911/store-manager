@@ -10,9 +10,11 @@ interface InventoryState {
   filterStatus: 'all' | 'Healthy' | 'Low Stock' | 'Out of Stock';
   isLoading: boolean;
   error: string | null;
+  lastSyncedAt: Date | null;
   
   // Actions
   initialize: () => Promise<void>;
+  forceRefresh: () => Promise<void>;
   initializeFromStorage: () => Promise<void>;
   addStock: (skuId: string, quantity: number, type: 'bottles' | 'cartons', batchId?: string, notes?: string) => Promise<void>;
   updateLowStockThreshold: (skuId: string, threshold: number) => Promise<void>;
@@ -34,16 +36,29 @@ export const useInventoryStore = create<InventoryState>()(
       filterStatus: 'all',
       isLoading: false,
       error: null,
+      lastSyncedAt: null,
 
       initialize: async () => {
         set({ isLoading: true, error: null });
         try {
           const inventory = await storage.getInventory();
           const stockHistory = await storage.getStockHistory();
-          set({ inventory, stockHistory, isLoading: false });
+          set({ inventory, stockHistory, isLoading: false, lastSyncedAt: new Date() });
         } catch (error) {
           console.error('Error initializing inventory:', error);
           set({ isLoading: false, error: 'Failed to load inventory' });
+        }
+      },
+
+      forceRefresh: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const inventory = await storage.getInventory(true); // Force fresh from Neon
+          const stockHistory = await storage.getStockHistory();
+          set({ inventory, stockHistory, isLoading: false, lastSyncedAt: new Date() });
+        } catch (error) {
+          console.error('Error force refreshing inventory:', error);
+          set({ isLoading: false, error: 'Failed to refresh inventory' });
         }
       },
 
@@ -87,7 +102,7 @@ export const useInventoryStore = create<InventoryState>()(
         const newHistoryEntry: StockHistoryEntry = {
           id: crypto.randomUUID(),
           skuId,
-          productId: sku.productId,
+          productId: sku.productId || '',
           type: 'addition',
           quantity: bottleQuantity,
           previousStock,

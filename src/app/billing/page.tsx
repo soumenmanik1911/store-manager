@@ -1,14 +1,18 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProductStore } from '@/store/useProductStore';
 import { useBillStore } from '@/store/useBillStore';
 import { useInventoryStore } from '@/store/useInventoryStore';
+import { useSettingsStore } from '@/store/useSettingsStore';
 import { useToast } from '@/components/Toast';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
+import { validateStock } from '@/lib/validateStock';
 import { formatCurrency } from '@/lib/utils';
 import { Search, Plus, Minus, X, Printer, Receipt, CreditCard, Smartphone } from 'lucide-react';
-import { Product, ProductSize, BillItem } from '@/types';
+import { Product, ProductSize, BillItem, StoreSettings } from '@/types';
+import { BillSuccessModal } from '@/components/billing/BillSuccessModal';
 
 export default function BillingPage() {
   const router = useRouter();
@@ -29,8 +33,9 @@ export default function BillingPage() {
     clearCurrentBill,
     initializeFromStorage: initBills
   } = useBillStore();
-  const { inventory, initializeFromStorage: initInventory } = useInventoryStore();
+  const { inventory, initializeFromStorage: initInventory, forceRefresh: refreshInventory, isLoading: inventoryLoading } = useInventoryStore();
   const { addToast } = useToast();
+  const { shopName, shopPhone, shopAddress, taxRate, initialize: initSettings } = useSettingsStore();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -44,13 +49,68 @@ export default function BillingPage() {
   const [paymentMode, setPaymentModeLocal] = useState<'Cash' | 'UPI' | 'Card'>('Cash');
   const [cashReceived, setCashReceivedLocal] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  // Bill success modal state
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [savedBill, setSavedBill] = useState<BillItem[]>([]);
+  const [billDetails, setBillDetails] = useState<{
+    invoiceNumber: string;
+    customerName: string;
+    phoneNumber: string;
+    subtotal: number;
+    discountType: 'percentage' | 'flat';
+    discountValue: number;
+    discountAmount: number;
+    totalAmount: number;
+    paymentMode: 'Cash' | 'UPI' | 'Card';
+    cashReceived: number;
+    changeGiven: number;
+    createdAt: string;
+  } | null>(null);
+  
+  // Settings for modal
+  const settingsRef = useRef<StoreSettings>({
+    shopName: 'My Store',
+    ownerName: '',
+    shopPhone: 'N/A',
+    shopAddress: 'N/A',
+    taxRate: 0,
+    currency: 'INR',
+    lowStockDefaultThreshold: 50,
+  });
 
+  // Update settings ref when settings change
+  useEffect(() => {
+    settingsRef.current = {
+      shopName: shopName || 'My Store',
+      ownerName: '',
+      shopPhone: shopPhone || 'N/A',
+      shopAddress: shopAddress || 'N/A',
+      taxRate: taxRate || 0,
+      currency: 'INR',
+      lowStockDefaultThreshold: 50,
+    };
+  }, [shopName, shopPhone, shopAddress, taxRate]);
+
+  // Initialize with force refresh for inventory (billing needs fresh stock data)
   useEffect(() => {
     const initialize = async () => {
-      await Promise.all([initProducts(), initBills(), initInventory()]);
+      await Promise.all([initProducts(), initBills(), initSettings()]);
+      // Force fresh inventory for billing
+      await refreshInventory();
     };
     initialize();
-  }, [initProducts, initBills, initInventory]);
+  }, [initProducts, initBills, initSettings, refreshInventory]);
+
+  // Refetch on focus - 30 second stale time for billing
+  const handleInventoryRefetch = useCallback(() => {
+    return refreshInventory();
+  }, [refreshInventory]);
+  
+  useRefetchOnFocus({
+    onRefetch: handleInventoryRefetch,
+    staleTime: 30000, // 30 seconds
+  });
 
   // Filter products based on search
   const filteredProducts = useMemo(() => {
@@ -104,7 +164,7 @@ export default function BillingPage() {
     setPackaging('bottle');
   };
 
-  // Handle bill submission
+  // Handle bill submission with stock validation
   const handleSubmitBill = async () => {
     if (currentBill.items.length === 0) {
       addToast('error', 'No items in bill');
@@ -113,28 +173,58 @@ export default function BillingPage() {
 
     setIsSubmitting(true);
     
+    // Validate stock before generating bill
+    const validationResult = await validateStock(currentBill.items);
+    
+    if (!validationResult.pass) {
+      // Show error with failed items
+      const failedMessages = validationResult.failedItems.map(item => 
+        `${item.item.productName} (${item.item.sizeName}): need ${item.requiredQuantity}, available ${item.availableStock}`
+      ).join('\n');
+      
+      addToast('error', `Stock validation failed:\n${failedMessages}`);
+      setIsSubmitting(false);
+      return;
+    }
+    
     // Update store
     setCustomerInfo(customerName, phoneNumber);
     setDiscount(discountType, discountValue);
     setPaymentMode(paymentMode);
     setCashReceived(cashReceived);
 
+    // Capture bill data BEFORE calling submitBill (which clears the bill)
+    const billItems = [...currentBill.items];
+    const billSubtotal = getSubtotal();
+    const billDiscountAmount = getDiscountAmount();
+    const billTotal = getTotal();
+    const billChange = paymentMode === 'Cash' ? cashReceived - billTotal : 0;
+    
     const result = submitBill();
 
-    if (result.success) {
-      addToast('success', `Bill ${result.invoiceNumber} generated successfully`);
+    if (result.success && result.invoiceNumber) {
+      // Store bill details for modal (using captured data)
+      setSavedBill(billItems);
+      setBillDetails({
+        invoiceNumber: result.invoiceNumber,
+        customerName,
+        phoneNumber,
+        subtotal: billSubtotal,
+        discountType,
+        discountValue,
+        discountAmount: billDiscountAmount,
+        totalAmount: billTotal,
+        paymentMode,
+        cashReceived,
+        changeGiven: billChange,
+        createdAt: new Date().toISOString(),
+      });
       
-      // Print receipt
-      window.print();
+      // Show success modal instead of printing
+      setShowSuccessModal(true);
       
-      // Reset form
-      setCustomerName('');
-      setPhoneNumber('');
-      setDiscountValue(0);
-      setCashReceived(0);
-      setSelectedProduct(null);
-      setSelectedSize(null);
-      setQuantity(1);
+      // Refresh inventory after successful bill
+      refreshInventory();
     } else {
       addToast('error', result.error || 'Failed to generate bill');
     }
@@ -146,6 +236,29 @@ export default function BillingPage() {
   const discountAmount = getDiscountAmount();
   const total = getTotal();
   const change = paymentMode === 'Cash' ? cashReceived - total : 0;
+
+  // Handle new bill - reset everything
+  const handleNewBill = () => {
+    // Clear the bill store
+    clearCurrentBill();
+    
+    // Reset form state
+    setCustomerName('');
+    setPhoneNumber('');
+    setDiscountValue(0);
+    setCashReceived(0);
+    setSelectedProduct(null);
+    setSelectedSize(null);
+    setQuantity(1);
+    setSearchQuery('');
+    
+    // Reset modal state
+    setShowSuccessModal(false);
+    setSavedBill([]);
+    setBillDetails(null);
+    
+    addToast('success', 'Ready for new bill');
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 no-print">
@@ -215,13 +328,21 @@ export default function BillingPage() {
                     className="w-full p-3 text-left bg-slate-50 rounded-lg hover:bg-primary/5 transition-colors"
                   >
                     <div className="flex justify-between items-start">
-                      <div>
-                        <h4 className="font-medium text-sm">{product.name}</h4>
-                        <p className="text-xs text-slate-500">{product.brand}</p>
+                      <div className="flex-1">
+                        <h4 className="font-bold text-sm">{product.name}</h4>
+                        <p className="text-xs text-slate-500 mb-2">{product.brand}</p>
+                        {/* Size badges */}
+                        <div className="flex flex-wrap gap-1">
+                          {product.sizes.map(size => (
+                            <span
+                              key={size.id}
+                              className="bg-primary/10 text-primary border border-primary/20 rounded-full px-2 py-0.5 text-xs font-bold"
+                            >
+                              {size.name} • ₹{size.pricePerBottle}
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                      <span className="text-primary font-bold text-sm">
-                        ₹{product.sizes[0]?.pricePerBottle}/unit
-                      </span>
                     </div>
                   </button>
                 ))}
@@ -440,11 +561,38 @@ export default function BillingPage() {
               className="w-full bg-primary hover:bg-primary/90 disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-4 rounded-xl font-bold text-base flex items-center justify-center gap-3 transition-all"
             >
               <Printer className="w-5 h-5" />
-              {isSubmitting ? 'Processing...' : 'Generate Bill & Print'}
+              {isSubmitting ? 'Processing...' : 'Generate Bill'}
             </button>
           </div>
         </div>
       </div>
+
+      {/* Bill Success Modal */}
+      {showSuccessModal && billDetails && (
+        <BillSuccessModal
+          bill={{
+            id: crypto.randomUUID(),
+            invoiceNumber: billDetails.invoiceNumber,
+            customerName: billDetails.customerName || undefined,
+            phoneNumber: billDetails.phoneNumber || undefined,
+            items: savedBill,
+            subtotal: billDetails.subtotal,
+            discountType: billDetails.discountType,
+            discountValue: billDetails.discountValue,
+            discountAmount: billDetails.discountAmount,
+            totalAmount: billDetails.totalAmount,
+            paymentMode: billDetails.paymentMode,
+            cashReceived: billDetails.cashReceived || undefined,
+            changeGiven: billDetails.changeGiven || undefined,
+            createdAt: billDetails.createdAt,
+            status: 'paid',
+          }}
+          settings={settingsRef.current}
+          isOpen={showSuccessModal}
+          onClose={() => setShowSuccessModal(false)}
+          onNewBill={handleNewBill}
+        />
+      )}
     </div>
   );
 }

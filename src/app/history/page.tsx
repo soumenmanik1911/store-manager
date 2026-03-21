@@ -1,23 +1,63 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useBillStore } from '@/store/useBillStore';
+import { useSettingsStore } from '@/store/useSettingsStore';
+import { useToast } from '@/components/Toast';
 import { formatCurrency, formatDate, formatDateTime, toNumber } from '@/lib/utils';
-import { Search, Calendar, Filter, Receipt, ChevronRight, X, Printer } from 'lucide-react';
-import { Bill } from '@/types';
+import { Search, Calendar, Filter, Receipt, ChevronRight, X, Printer, Download, Share2, MessageCircle, Loader2 } from 'lucide-react';
+import { Bill, StoreSettings } from '@/types';
+import { BillReceipt } from '@/components/billing/BillReceipt';
+import { downloadBillImage, shareBillImage, shareViaWhatsApp } from '@/lib/generateBillImage';
 
 export default function HistoryPage() {
   const { bills, initializeFromStorage } = useBillStore();
+  const { shopName, shopPhone, shopAddress, taxRate, initialize: initSettings } = useSettingsStore();
+  const { addToast } = useToast();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [dateFilter, setDateFilter] = useState('all');
   const [selectedBill, setSelectedBill] = useState<Bill | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Download/Share states
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
+  const [isWhatsapping, setIsWhatsapping] = useState(false);
+  const receiptRef = useRef<HTMLDivElement>(null);
+  
+  // Settings for receipt
+  const settingsRef = useRef<StoreSettings>({
+    shopName: 'My Store',
+    ownerName: '',
+    shopPhone: 'N/A',
+    shopAddress: 'N/A',
+    taxRate: 0,
+    currency: 'INR',
+    lowStockDefaultThreshold: 50,
+  });
+
+  // Update settings ref when settings change
+  useEffect(() => {
+    settingsRef.current = {
+      shopName: shopName || 'My Store',
+      ownerName: '',
+      shopPhone: shopPhone || 'N/A',
+      shopAddress: shopAddress || 'N/A',
+      taxRate: taxRate || 0,
+      currency: 'INR',
+      lowStockDefaultThreshold: 50,
+    };
+  }, [shopName, shopPhone, shopAddress, taxRate]);
 
   useEffect(() => {
-    initializeFromStorage();
-    setIsLoading(false);
-  }, [initializeFromStorage]);
+    const init = async () => {
+      await initSettings();
+      await initializeFromStorage();
+      setIsLoading(false);
+    };
+    init();
+  }, [initializeFromStorage, initSettings]);
 
   // Filter bills
   const filteredBills = bills.filter((bill) => {
@@ -74,9 +114,72 @@ export default function HistoryPage() {
     }
   };
 
+  const handleDownload = async () => {
+    if (!receiptRef.current || !selectedBill) return;
+    
+    setIsDownloading(true);
+    try {
+      await downloadBillImage(receiptRef.current, selectedBill.invoiceNumber);
+      addToast('success', 'Bill downloaded successfully');
+    } catch (error) {
+      console.error('Download error:', error);
+      addToast('error', 'Failed to download bill');
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!receiptRef.current || !selectedBill) return;
+    
+    setIsSharing(true);
+    try {
+      const success = await shareBillImage(receiptRef.current, selectedBill.invoiceNumber, settingsRef.current.shopName);
+      if (success) {
+        addToast('success', 'Bill shared successfully');
+      } else {
+        addToast('info', 'Sharing not supported on this device — bill downloaded instead');
+      }
+    } catch (error) {
+      console.error('Share error:', error);
+      addToast('error', 'Failed to share bill');
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  const handleWhatsApp = async () => {
+    if (!receiptRef.current || !selectedBill) return;
+    
+    setIsWhatsapping(true);
+    try {
+      await shareViaWhatsApp(
+        receiptRef.current, 
+        selectedBill.invoiceNumber, 
+        settingsRef.current.shopName,
+        Number(selectedBill.totalAmount)
+      );
+      addToast('info', 'Bill image downloaded — please attach it manually in WhatsApp');
+    } catch (error) {
+      console.error('WhatsApp error:', error);
+      addToast('error', 'Failed to share via WhatsApp');
+    } finally {
+      setIsWhatsapping(false);
+    }
+  };
+
   const handlePrint = (bill: Bill) => {
     window.print();
   };
+
+  const handleCloseModal = () => {
+    setSelectedBill(null);
+    setIsDownloading(false);
+    setIsSharing(false);
+    setIsWhatsapping(false);
+  };
+
+  const isAnyLoading = isDownloading || isSharing || isWhatsapping;
 
   if (isLoading) {
     return (
@@ -226,100 +329,98 @@ export default function HistoryPage() {
         </div>
       </div>
 
+      {/* Hidden receipt for html2canvas capture */}
+      {selectedBill && (
+        <div
+          ref={receiptRef}
+          style={{
+            position: 'absolute',
+            left: '-9999px',
+            top: '-9999px',
+            zIndex: -1
+          }}
+        >
+          <BillReceipt bill={selectedBill} settings={settingsRef.current} />
+        </div>
+      )}
+
       {/* Bill Detail Modal */}
       {selectedBill && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+          <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center sticky top-0 bg-white z-10">
               <div>
                 <h3 className="text-lg font-bold">Bill Details</h3>
                 <p className="text-sm text-slate-500">{selectedBill.invoiceNumber}</p>
               </div>
               <button
-                onClick={() => setSelectedBill(null)}
+                onClick={handleCloseModal}
                 className="text-slate-400 hover:text-slate-600"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
             
-            <div className="p-6 space-y-4">
-              {/* Customer Info */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-slate-500 uppercase">Customer</p>
-                  <p className="font-medium">{selectedBill.customerName || 'Walk-in'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 uppercase">Date</p>
-                  <p className="font-medium">{formatDateTime(selectedBill.createdAt)}</p>
-                </div>
-              </div>
-
-              {/* Items */}
-              <div>
-                <p className="text-xs text-slate-500 uppercase mb-2">Items</p>
-                <div className="space-y-2">
-                  {selectedBill.items.map((item) => (
-                    <div key={item.id} className="flex justify-between text-sm">
-                      <span>{item.productName} ({item.sizeName}) x {item.quantity} {item.packaging}</span>
-                      <span className="font-medium">{formatCurrency(toNumber(item.totalPrice))}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Totals */}
-              <div className="pt-4 border-t border-slate-100 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Subtotal</span>
-                  <span>{formatCurrency(selectedBill.subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span>Discount ({selectedBill.discountType === 'percentage' ? `${selectedBill.discountValue}%` : 'Flat'})</span>
-                  <span>-{formatCurrency(selectedBill.discountAmount)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-lg">
-                  <span>Total</span>
-                  <span className="text-primary">{formatCurrency(selectedBill.totalAmount)}</span>
-                </div>
-              </div>
-
-              {/* Payment Info */}
-              <div className="pt-4 border-t border-slate-100 border-slate-800">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs text-slate-500 uppercase">Payment Mode</p>
-                    <p className="font-medium">{selectedBill.paymentMode}</p>
-                  </div>
-                  {selectedBill.cashReceived && (
-                    <>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase">Cash Received</p>
-                        <p className="font-medium">{formatCurrency(selectedBill.cashReceived)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase">Change Given</p>
-                        <p className="font-medium">{formatCurrency(selectedBill.changeGiven || 0)}</p>
-                      </div>
-                    </>
-                  )}
-                </div>
+            {/* Receipt Preview */}
+            <div className="p-4 border-b border-slate-100 bg-slate-50">
+              <div className="scale-50 origin-top -mx-16 -mb-8">
+                <BillReceipt bill={selectedBill} settings={settingsRef.current} />
               </div>
             </div>
 
-            <div className="p-6 bg-slate-50 bg-slate-100 flex gap-3">
+            <div className="p-6 space-y-3">
+              {/* Download JPG - Primary */}
               <button
-                onClick={() => setSelectedBill(null)}
-                className="flex-1 px-4 py-2.5 rounded-lg font-bold border border-slate-200 border-slate-700 hover:bg-white hover:bg-slate-800 transition-colors"
+                onClick={handleDownload}
+                disabled={isAnyLoading}
+                className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white py-3 px-4 rounded-xl font-bold transition-colors"
               >
-                Close
+                {isDownloading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Download className="w-5 h-5" />
+                )}
+                Download JPG
               </button>
+
+              {/* Share and WhatsApp Row */}
+              <div className="grid grid-cols-2 gap-3">
+                {/* Share */}
+                <button
+                  onClick={handleShare}
+                  disabled={isAnyLoading}
+                  className="flex items-center justify-center gap-2 border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed py-3 px-4 rounded-xl font-bold text-slate-700 transition-colors"
+                >
+                  {isSharing ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <Share2 className="w-5 h-5" />
+                  )}
+                  Share
+                </button>
+
+                {/* WhatsApp */}
+                <button
+                  onClick={handleWhatsApp}
+                  disabled={isAnyLoading}
+                  className="flex items-center justify-center gap-2 border-2 border-green-600 hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed py-3 px-4 rounded-xl font-bold text-green-600 transition-colors"
+                >
+                  {isWhatsapping ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <MessageCircle className="w-5 h-5" />
+                  )}
+                  WhatsApp
+                </button>
+              </div>
+
+              {/* Print Button */}
               <button
                 onClick={() => handlePrint(selectedBill)}
-                className="flex-1 px-4 py-2.5 rounded-lg font-bold bg-primary text-white hover:bg-primary/90 transition-colors flex items-center justify-center gap-2"
+                disabled={isAnyLoading}
+                className="w-full flex items-center justify-center gap-2 border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed py-3 px-4 rounded-xl font-bold text-slate-700 transition-colors"
               >
-                <Printer className="w-4 h-4" />
+                <Printer className="w-5 h-5" />
                 Print
               </button>
             </div>

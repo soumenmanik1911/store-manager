@@ -25,13 +25,24 @@ export type StockStatus = 'Healthy' | 'Low Stock' | 'Out of Stock';
 
 export interface SKU {
   id: string;
-  productId: string;
-  sizeId: string;
+  productId?: string;
+  sizeId?: string;
   skuCode: string; // Auto-generated SKU
   currentStock: number;
   lowStockThreshold: number;
   status: StockStatus;
   lastRestocked?: string;
+  // Flat fields from JOIN query
+  productSizeId?: string;
+  productName?: string;
+  brand?: string;
+  category?: string;
+  imageUrl?: string;
+  sizeName?: string;
+  pricePerBottle?: number;
+  pricePerCarton?: number;
+  bottlesPerCarton?: number;
+  isPinned?: boolean;
 }
 
 export interface StockEntry {
@@ -96,8 +107,8 @@ export interface Bill {
 export interface StoreSettings {
   shopName: string;
   ownerName: string;
-  address?: string;
-  phone?: string;
+  shopAddress?: string;
+  shopPhone?: string;
   taxRate: number;
   currency: string;
   lowStockDefaultThreshold: number;

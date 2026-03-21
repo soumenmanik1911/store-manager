@@ -13,14 +13,40 @@ export async function GET() {
       // Create default settings if none exist
       const [newSettings] = await db.insert(settings).values({
         shopName: 'FrostyFlow',
+        shopPhone: '',
+        shopAddress: '',
+        taxRate: '0',
       }).returning();
       
+      // Map to response
+      const response = {
+        shopName: newSettings.shopName,
+        ownerName: newSettings.ownerName,
+        shopPhone: newSettings.shopPhone,
+        shopAddress: newSettings.shopAddress,
+        taxRate: Number(newSettings.taxRate) || 0,
+        currency: newSettings.currency || 'INR',
+        lowStockDefaultThreshold: newSettings.lowStockDefaultThreshold || 50,
+      };
+      
       console.log('✅ Default settings created');
-      return NextResponse.json(newSettings);
+      return NextResponse.json(response);
     }
     
+    // Map database fields to API response
+    const settingsData = allSettings[0];
+    const response = {
+      shopName: settingsData.shopName,
+      ownerName: settingsData.ownerName,
+      shopPhone: settingsData.shopPhone,
+      shopAddress: settingsData.shopAddress,
+      taxRate: Number(settingsData.taxRate) || 0,
+      currency: settingsData.currency || 'INR',
+      lowStockDefaultThreshold: settingsData.lowStockDefaultThreshold || 50,
+    };
+    
     console.log('✅ Settings fetched');
-    return NextResponse.json(allSettings[0]);
+    return NextResponse.json(response);
   } catch (error) {
     console.error('❌ Settings API Error:', error);
     return NextResponse.json(
@@ -74,8 +100,19 @@ export async function PUT(request: Request) {
     // Fetch updated settings
     const [updatedSettings] = await db.select().from(settings).where(eq(settings.id, settingsId));
     
+    // Map database fields to API response
+    const response = {
+      shopName: updatedSettings.shopName,
+      ownerName: updatedSettings.ownerName,
+      shopPhone: updatedSettings.shopPhone,
+      shopAddress: updatedSettings.shopAddress,
+      taxRate: Number(updatedSettings.taxRate) || 0,
+      currency: updatedSettings.currency || 'INR',
+      lowStockDefaultThreshold: updatedSettings.lowStockDefaultThreshold || 50,
+    };
+    
     console.log('✅ Settings updated');
-    return NextResponse.json(updatedSettings);
+    return NextResponse.json(response);
   } catch (error) {
     console.error('❌ Settings PUT Error:', error);
     return NextResponse.json(

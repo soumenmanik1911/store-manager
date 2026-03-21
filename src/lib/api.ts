@@ -275,8 +275,8 @@ export async function getSettings(): Promise<StoreSettings> {
   return {
     shopName: settings.shopName || 'FrostyFlow',
     ownerName: settings.ownerName || '',
-    address: settings.shopAddress || '',
-    phone: settings.shopPhone || '',
+    shopAddress: settings.shopAddress || '',
+    shopPhone: settings.shopPhone || '',
     taxRate: Number(settings.taxRate) || 0,
     currency: settings.currency || 'INR',
     lowStockDefaultThreshold: settings.lowStockDefaultThreshold || 50,
@@ -290,8 +290,8 @@ export async function saveSettings(settings: StoreSettings): Promise<void> {
     body: JSON.stringify({
       shopName: settings.shopName,
       ownerName: settings.ownerName,
-      shopPhone: settings.phone,
-      shopAddress: settings.address,
+      shopPhone: settings.shopPhone,
+      shopAddress: settings.shopAddress,
       taxRate: settings.taxRate,
       currency: settings.currency,
       lowStockDefaultThreshold: settings.lowStockDefaultThreshold,

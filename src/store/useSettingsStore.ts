@@ -10,9 +10,11 @@ interface SettingsState {
   taxRate: number;
   isLoading: boolean;
   error: string | null;
+  lastSyncedAt: Date | null;
   
   // Actions
   initialize: () => Promise<void>;
+  forceRefresh: () => Promise<void>;
   setShopName: (name: string) => void;
   setOwnerName: (name: string) => void;
   setShopPhone: (phone: string) => void;
@@ -31,6 +33,7 @@ export const useSettingsStore = create<SettingsState>()(
       taxRate: 0,
       isLoading: false,
       error: null,
+      lastSyncedAt: null,
 
       initialize: async () => {
         set({ isLoading: true, error: null });
@@ -39,14 +42,34 @@ export const useSettingsStore = create<SettingsState>()(
           set({
             shopName: settings.shopName || 'FrostyFlow',
             ownerName: settings.ownerName || '',
-            shopPhone: settings.phone || '',
-            shopAddress: settings.address || '',
+            shopPhone: settings.shopPhone || '',
+            shopAddress: settings.shopAddress || '',
             taxRate: settings.taxRate || 0,
             isLoading: false,
+            lastSyncedAt: new Date(),
           });
         } catch (error) {
           console.error('Error initializing settings:', error);
           set({ isLoading: false, error: 'Failed to load settings' });
+        }
+      },
+
+      forceRefresh: async () => {
+        set({ isLoading: true, error: null });
+        try {
+          const settings = await storage.getSettings(true); // Force fresh from Neon
+          set({
+            shopName: settings.shopName || 'FrostyFlow',
+            ownerName: settings.ownerName || '',
+            shopPhone: settings.shopPhone || '',
+            shopAddress: settings.shopAddress || '',
+            taxRate: settings.taxRate || 0,
+            isLoading: false,
+            lastSyncedAt: new Date(),
+          });
+        } catch (error) {
+          console.error('Error force refreshing settings:', error);
+          set({ isLoading: false, error: 'Failed to refresh settings' });
         }
       },
 
@@ -63,8 +86,8 @@ export const useSettingsStore = create<SettingsState>()(
           await storage.saveSettings({
             shopName,
             ownerName,
-            phone: shopPhone,
-            address: shopAddress,
+            shopPhone,
+            shopAddress,
             taxRate,
             currency: 'INR',
             lowStockDefaultThreshold: 50,

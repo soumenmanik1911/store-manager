@@ -1,10 +1,12 @@
 import { Product, SKU, StockHistoryEntry, Bill, StoreSettings } from '@/types';
+import * as cache from '@/lib/cache';
 
 // ============================================================================
 // STORAGE ABSTRACTION LAYER - Neon Database API
 // ============================================================================
 // This file provides a unified interface for data persistence using Neon DB.
 // All operations now call the API routes instead of using localStorage.
+// Includes smart caching with TTL and automatic invalidation.
 // ============================================================================
 
 const API_BASE = '/api';
@@ -12,12 +14,19 @@ const API_BASE = '/api';
 // ============================================================================
 // INTERNAL CACHE (for sync reads before API responds)
 // ============================================================================
+// Note: These are fallback caches. The primary cache is in lib/cache.ts
+// These are kept for sync operations and as backup.
 
 let productsCache: Product[] = [];
 let inventoryCache: SKU[] = [];
 let billsCache: Bill[] = [];
 let stockHistoryCache: StockHistoryEntry[] = [];
 let settingsCache: StoreSettings | null = null;
+
+// Initialize cache system on module load
+if (typeof window !== 'undefined') {
+  cache.initializeCache();
+}
 
 // ============================================================================
 // HTTP HELPER
@@ -45,11 +54,22 @@ async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
 
 /**
  * Get all products from API
+ * @param forceFresh - If true, bypass cache and fetch from Neon
  */
-export async function getProducts(): Promise<Product[]> {
+export async function getProducts(forceFresh: boolean = false): Promise<Product[]> {
+  // Check cache first if not forcing fresh data
+  if (!forceFresh) {
+    const cachedProducts = cache.getCache<Product[]>('products');
+    if (cachedProducts) {
+      productsCache = cachedProducts;
+      return cachedProducts;
+    }
+  }
+  
   try {
     const products = await apiCall<Product[]>('/products');
     productsCache = products;
+    cache.setCache('products', products);
     return products;
   } catch (error) {
     console.error('Error fetching products:', error);
@@ -97,6 +117,9 @@ export async function addProduct(product: Product): Promise<void> {
     
     // Add to cache
     productsCache.push(newProduct);
+    
+    // Invalidate cache - adding product affects both products and inventory
+    cache.invalidateCacheByAction('product:add');
   } catch (error) {
     console.error('Error adding product:', error);
     throw error;
@@ -118,6 +141,9 @@ export async function updateProduct(productId: string, updates: Partial<Product>
     if (index !== -1) {
       productsCache[index] = { ...productsCache[index], ...updates, updatedAt: new Date().toISOString() };
     }
+    
+    // Invalidate cache - updating product affects both products and inventory
+    cache.invalidateCacheByAction('product:update');
   } catch (error) {
     console.error('Error updating product:', error);
     throw error;
@@ -139,6 +165,9 @@ export async function deleteProduct(productId: string): Promise<void> {
     // Also remove related inventory and stock history
     inventoryCache = inventoryCache.filter(s => s.productId !== productId);
     stockHistoryCache = stockHistoryCache.filter(sh => sh.productId !== productId);
+    
+    // Invalidate cache - deleting product affects both products and inventory
+    cache.invalidateCacheByAction('product:delete');
   } catch (error) {
     console.error('Error deleting product:', error);
     throw error;
@@ -151,11 +180,22 @@ export async function deleteProduct(productId: string): Promise<void> {
 
 /**
  * Get all inventory/SKUs from API
+ * @param forceFresh - If true, bypass cache and fetch from Neon
  */
-export async function getInventory(): Promise<SKU[]> {
+export async function getInventory(forceFresh: boolean = false): Promise<SKU[]> {
+  // Check cache first if not forcing fresh data
+  if (!forceFresh) {
+    const cachedInventory = cache.getCache<SKU[]>('inventory');
+    if (cachedInventory) {
+      inventoryCache = cachedInventory;
+      return cachedInventory;
+    }
+  }
+  
   try {
     const inventory = await apiCall<SKU[]>('/inventory');
     inventoryCache = inventory;
+    cache.setCache('inventory', inventory);
     return inventory;
   } catch (error) {
     console.error('Error fetching inventory:', error);
@@ -215,6 +255,9 @@ export async function upsertSKU(sku: SKU): Promise<void> {
     } else {
       inventoryCache.push(sku);
     }
+    
+    // Invalidate cache - adding/updating stock affects inventory
+    cache.invalidateCacheByAction('stock:add');
   } catch (error) {
     console.error('Error upserting SKU:', error);
     throw error;
@@ -245,6 +288,9 @@ export async function updateStock(skuId: string, newStock: number): Promise<void
         inventoryCache[index].status = 'Healthy';
       }
     }
+    
+    // Invalidate cache - updating stock affects inventory
+    cache.invalidateCacheByAction('stock:update');
   } catch (error) {
     console.error('Error updating stock:', error);
     throw error;
@@ -266,6 +312,8 @@ export async function deductStock(skuId: string, quantity: number): Promise<bool
   
   try {
     await updateStock(skuId, newStock);
+    // Invalidate cache - deducting stock affects inventory
+    cache.invalidateCacheByAction('stock:deduct');
     return true;
   } catch (error) {
     console.error('Error deducting stock:', error);
@@ -305,11 +353,22 @@ export async function addStockHistoryEntry(entry: StockHistoryEntry): Promise<vo
 
 /**
  * Get all bills from API
+ * @param forceFresh - If true, bypass cache and fetch from Neon
  */
-export async function getBills(): Promise<Bill[]> {
+export async function getBills(forceFresh: boolean = false): Promise<Bill[]> {
+  // Check cache first if not forcing fresh data
+  if (!forceFresh) {
+    const cachedBills = cache.getCache<Bill[]>('bills');
+    if (cachedBills) {
+      billsCache = cachedBills;
+      return cachedBills;
+    }
+  }
+  
   try {
     const bills = await apiCall<Bill[]>('/bills');
     billsCache = bills;
+    cache.setCache('bills', bills);
     return bills;
   } catch (error) {
     console.error('Error fetching bills:', error);
@@ -357,6 +416,9 @@ export async function addBill(bill: Bill): Promise<void> {
     
     // Add to cache
     billsCache.unshift(newBill);
+    
+    // Invalidate cache - adding bill affects both bills and inventory
+    cache.invalidateCacheByAction('bill:add');
   } catch (error) {
     console.error('Error adding bill:', error);
     throw error;
@@ -401,8 +463,8 @@ export function getNextInvoiceNumber(): string {
 const DEFAULT_SETTINGS: StoreSettings = {
   shopName: 'Cold Drinks Store',
   ownerName: 'Store Owner',
-  address: '',
-  phone: '',
+  shopAddress: '',
+  shopPhone: '',
   taxRate: 0,
   currency: 'INR',
   lowStockDefaultThreshold: 50,
@@ -410,11 +472,22 @@ const DEFAULT_SETTINGS: StoreSettings = {
 
 /**
  * Get store settings from API
+ * @param forceFresh - If true, bypass cache and fetch from Neon
  */
-export async function getSettings(): Promise<StoreSettings> {
+export async function getSettings(forceFresh: boolean = false): Promise<StoreSettings> {
+  // Check cache first if not forcing fresh data
+  if (!forceFresh) {
+    const cachedSettings = cache.getCache<StoreSettings>('settings');
+    if (cachedSettings) {
+      settingsCache = cachedSettings;
+      return cachedSettings;
+    }
+  }
+  
   try {
     const settings = await apiCall<StoreSettings>('/settings');
     settingsCache = settings;
+    cache.setCache('settings', settings);
     return settings;
   } catch (error) {
     console.error('Error fetching settings:', error);
@@ -439,8 +512,8 @@ export async function saveSettings(settings: StoreSettings): Promise<void> {
       body: JSON.stringify({
         shopName: settings.shopName,
         ownerName: settings.ownerName,
-        shopPhone: settings.phone,
-        shopAddress: settings.address,
+        shopPhone: settings.shopPhone,
+        shopAddress: settings.shopAddress,
         taxRate: settings.taxRate,
         currency: settings.currency,
         lowStockDefaultThreshold: settings.lowStockDefaultThreshold,
@@ -448,6 +521,9 @@ export async function saveSettings(settings: StoreSettings): Promise<void> {
     });
     
     settingsCache = updatedSettings;
+    
+    // Invalidate cache - updating settings affects settings
+    cache.invalidateCacheByAction('settings:update');
   } catch (error) {
     console.error('Error saving settings:', error);
     throw error;
@@ -488,6 +564,9 @@ export async function clearAllData(): Promise<void> {
   billsCache = [];
   stockHistoryCache = [];
   settingsCache = null;
+  
+  // Also clear the cache module
+  cache.clearAllCache();
 }
 
 /**

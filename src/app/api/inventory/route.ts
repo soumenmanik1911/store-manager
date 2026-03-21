@@ -5,48 +5,40 @@ import { eq, and } from 'drizzle-orm';
 
 export async function GET() {
   try {
-    console.log('🔄 Fetching inventory...');
+    console.log('🔄 Fetching inventory with JOIN...');
     
-    // Simple query - get all inventory first
-    const allInventory = await db.select().from(inventory);
-    console.log('📦 Inventory count:', allInventory.length);
+    // Proper JOIN query using Drizzle ORM
+    const inventoryWithDetails = await db
+      .select({
+        // Inventory fields
+        id: inventory.id,
+        skuCode: inventory.skuCode,
+        currentStock: inventory.currentStock,
+        lowStockThreshold: inventory.lowStockThreshold,
+        status: inventory.status,
+        isPinned: inventory.isPinned,
+        lastRestocked: inventory.lastRestocked,
+        productSizeId: inventory.productSizeId,
+        // Aliases for backward compatibility
+        sizeId: inventory.productSizeId,
+        productId: productSizes.productId,
+        // ProductSize fields
+        sizeName: productSizes.sizeName,
+        pricePerBottle: productSizes.pricePerBottle,
+        pricePerCarton: productSizes.pricePerCarton,
+        bottlesPerCarton: productSizes.bottlesPerCarton,
+        // Product fields (mapped to flat fields)
+        productName: products.name,
+        brand: products.brand,
+        category: products.category,
+        imageUrl: products.imageUrl,
+      })
+      .from(inventory)
+      .leftJoin(productSizes, eq(inventory.productSizeId, productSizes.id))
+      .leftJoin(products, eq(productSizes.productId, products.id));
     
-    // Get all product sizes in one query
-    const allSizes = await db.select().from(productSizes);
-    console.log('📏 Product sizes count:', allSizes.length);
-    
-    // Get all products in one query  
-    const allProducts = await db.select().from(products);
-    console.log('🏷️ Products count:', allProducts.length);
-    
-    // Build the response with joins in memory
-    const inventoryWithDetails = allInventory.map(item => {
-      // Find the size
-      const size = allSizes.find(s => s.id === item.productSizeId);
-      
-      if (!size) {
-        return { 
-          ...item, 
-          sizeId: item.productSizeId, // Map to frontend field name
-          productName: null, 
-          brand: null, 
-          sizeName: null 
-        };
-      }
-      
-      // Find the product
-      const product = allProducts.find(p => p.id === size.productId);
-      
-      return {
-        ...item,
-        sizeId: item.productSizeId, // Map to frontend field name
-        productName: product?.name || null,
-        brand: product?.brand || null,
-        sizeName: size.sizeName,
-      };
-    });
-    
-    console.log('✅ Inventory fetched successfully');
+    console.log('📦 Inventory count:', inventoryWithDetails.length);
+    console.log('✅ Inventory fetched successfully with JOIN');
     return NextResponse.json(inventoryWithDetails);
   } catch (error) {
     console.error('❌ Inventory API Error:', error);

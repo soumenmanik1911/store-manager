@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { Header } from '@/components/layout/Header';
 import { useProductStore } from '@/store/useProductStore';
 import { useBillStore } from '@/store/useBillStore';
 import { useInventoryStore } from '@/store/useInventoryStore';
+import { useRefetchOnFocus } from '@/hooks/useRefetchOnFocus';
 import { formatCurrency, formatDate, calculatePercentageChange, toNumber } from '@/lib/utils';
 import { 
   TrendingUp, 
@@ -70,18 +71,30 @@ function CounterAnimation({ value, suffix = '' }: { value: number; suffix?: stri
 }
 
 export default function DashboardPage() {
-  const { products, initializeFromStorage: initProducts } = useProductStore();
-  const { bills, initializeFromStorage: initBills } = useBillStore();
-  const { inventory, initializeFromStorage: initInventory } = useInventoryStore();
+  const { products, forceRefresh: refreshProducts } = useProductStore();
+  const { bills, forceRefresh: refreshBills } = useBillStore();
+  const { inventory, forceRefresh: refreshInventory } = useInventoryStore();
   const [isLoading, setIsLoading] = useState(true);
   const [salesData, setSalesData] = useState<{ date: string; total: number }[]>([]);
 
+  // Dashboard always fetches fresh stats - bypass cache
   useEffect(() => {
-    initProducts();
-    initBills();
-    initInventory();
-    setIsLoading(false);
-  }, [initProducts, initBills, initInventory]);
+    const initialize = async () => {
+      await Promise.all([refreshProducts(), refreshBills(), refreshInventory()]);
+      setIsLoading(false);
+    };
+    initialize();
+  }, [refreshProducts, refreshBills, refreshInventory]);
+
+  // Refetch on focus - 60 second stale time for dashboard
+  const handleDashboardRefetch = useCallback(async () => {
+    await Promise.all([refreshProducts(), refreshBills(), refreshInventory()]);
+  }, [refreshProducts, refreshBills, refreshInventory]);
+  
+  useRefetchOnFocus({
+    onRefetch: handleDashboardRefetch,
+    staleTime: 60000, // 60 seconds
+  });
 
   // Calculate today's stats - handle both string and number types
   const today = new Date().toISOString().split('T')[0];

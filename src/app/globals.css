@@ -70,9 +70,36 @@ body {
 
 /* Print styles for thermal receipt */
 @media print {
+  @page {
+    margin: 0;
+    size: auto;
+  }
+  
   body {
     background: white !important;
     color: black !important;
+    margin: 0;
+    padding: 0;
+  }
+  
+  /* Hide everything except the receipt */
+  body * {
+    visibility: hidden;
+  }
+  
+  #print-receipt,
+  #print-receipt * {
+    visibility: visible;
+  }
+  
+  #print-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 400px;
+    margin: 0;
+    padding: 20px;
+    background: white;
   }
   
   .no-print {
