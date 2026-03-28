@@ -188,7 +188,9 @@ export async function downloadBillPDF(
 ): Promise<void> {
   try {
     // Dynamically import jsPDF to avoid SSR issues
-    const { jsPDF } = await import('jspdf');
+    // jsPDF v4 uses default export
+    const jsPDFModule = await import('jspdf');
+    const jsPDF = jsPDFModule.default;
     
     // Capture the receipt as image
     const dataUrl = await captureReceiptAsPng(element);
