@@ -10,7 +10,7 @@ export async function captureReceiptAsBase64(element: HTMLElement): Promise<stri
       backgroundColor: '#ffffff',
       useCORS: true,
       logging: false,
-      windowWidth: 400,
+      windowWidth: 384,
     } as any;
     const canvas = await html2canvas(element, options);
 
@@ -152,6 +152,69 @@ export async function shareViaWhatsApp(
     window.open(whatsappUrl, '_blank');
   } catch (error) {
     console.error('Error sharing via WhatsApp:', error);
+    throw error;
+  }
+}
+
+/**
+ * Capture a DOM element as PNG data URL (better for PDF)
+ */
+export async function captureReceiptAsPng(element: HTMLElement): Promise<string> {
+  try {
+    const options = {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      logging: false,
+      windowWidth: 384,
+    } as any;
+    const canvas = await html2canvas(element, options);
+
+    const dataUrl = canvas.toDataURL('image/png');
+    return dataUrl;
+  } catch (error) {
+    console.error('Error capturing receipt:', error);
+    throw error;
+  }
+}
+
+/**
+ * Download a receipt as PDF file
+ * Uses html2canvas to capture the receipt and jsPDF to create PDF
+ */
+export async function downloadBillPDF(
+  element: HTMLElement,
+  invoiceNumber: string
+): Promise<void> {
+  try {
+    // Dynamically import jsPDF to avoid SSR issues
+    const { jsPDF } = await import('jspdf');
+    
+    // Capture the receipt as image
+    const dataUrl = await captureReceiptAsPng(element);
+    
+    // Get image dimensions
+    const img = new Image();
+    img.src = dataUrl;
+    await new Promise((resolve) => { img.onload = resolve; });
+    
+    // Create PDF with appropriate dimensions
+    const pdfWidth = 80; // 80mm thermal paper width
+    const pdfHeight = (img.height * pdfWidth) / img.width;
+    
+    const pdf = new jsPDF({
+      orientation: pdfHeight > pdfWidth ? 'portrait' : 'portrait',
+      unit: 'mm',
+      format: [pdfWidth, pdfHeight + 10], // Add some margin
+    });
+    
+    // Add the image
+    pdf.addImage(dataUrl, 'PNG', 0, 5, pdfWidth, (img.height * pdfWidth) / img.width);
+    
+    // Save the PDF
+    pdf.save(`INV-${invoiceNumber.replace('INV-', '')}-${getFormattedDate()}.pdf`);
+  } catch (error) {
+    console.error('Error generating PDF:', error);
     throw error;
   }
 }

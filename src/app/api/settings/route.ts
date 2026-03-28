@@ -24,6 +24,8 @@ export async function GET() {
         ownerName: newSettings.ownerName,
         shopPhone: newSettings.shopPhone,
         shopAddress: newSettings.shopAddress,
+        shopGstin: newSettings.shopGstin || '',
+        shopEmail: newSettings.shopEmail || '',
         taxRate: Number(newSettings.taxRate) || 0,
         currency: newSettings.currency || 'INR',
         lowStockDefaultThreshold: newSettings.lowStockDefaultThreshold || 50,
@@ -40,6 +42,8 @@ export async function GET() {
       ownerName: settingsData.ownerName,
       shopPhone: settingsData.shopPhone,
       shopAddress: settingsData.shopAddress,
+      shopGstin: settingsData.shopGstin || '',
+      shopEmail: settingsData.shopEmail || '',
       taxRate: Number(settingsData.taxRate) || 0,
       currency: settingsData.currency || 'INR',
       lowStockDefaultThreshold: settingsData.lowStockDefaultThreshold || 50,
@@ -59,7 +63,7 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
-    const { shopName, ownerName, shopPhone, shopAddress, taxRate, currency, lowStockDefaultThreshold } = body;
+    const { shopName, ownerName, shopPhone, shopAddress, shopGstin, shopEmail, taxRate, currency, lowStockDefaultThreshold } = body;
     
     console.log('🔄 Updating settings...');
     
@@ -73,6 +77,8 @@ export async function PUT(request: Request) {
         ownerName: ownerName || null,
         shopPhone: shopPhone || null,
         shopAddress: shopAddress || null,
+        shopGstin: shopGstin || null,
+        shopEmail: shopEmail || null,
         taxRate: taxRate?.toString() || '0',
         currency: currency || 'INR',
         lowStockDefaultThreshold: lowStockDefaultThreshold || 50,
@@ -91,6 +97,8 @@ export async function PUT(request: Request) {
       ownerName: ownerName !== undefined ? ownerName : currentSettings.ownerName,
       shopPhone: shopPhone !== undefined ? shopPhone : currentSettings.shopPhone,
       shopAddress: shopAddress !== undefined ? shopAddress : currentSettings.shopAddress,
+      shopGstin: shopGstin !== undefined ? shopGstin : currentSettings.shopGstin,
+      shopEmail: shopEmail !== undefined ? shopEmail : currentSettings.shopEmail,
       taxRate: taxRate !== undefined ? taxRate.toString() : currentSettings.taxRate,
       currency: currency || currentSettings.currency,
       lowStockDefaultThreshold: lowStockDefaultThreshold || currentSettings.lowStockDefaultThreshold,
@@ -106,6 +114,8 @@ export async function PUT(request: Request) {
       ownerName: updatedSettings.ownerName,
       shopPhone: updatedSettings.shopPhone,
       shopAddress: updatedSettings.shopAddress,
+      shopGstin: updatedSettings.shopGstin || '',
+      shopEmail: updatedSettings.shopEmail || '',
       taxRate: Number(updatedSettings.taxRate) || 0,
       currency: updatedSettings.currency || 'INR',
       lowStockDefaultThreshold: updatedSettings.lowStockDefaultThreshold || 50,

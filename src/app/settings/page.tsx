@@ -11,12 +11,16 @@ export default function SettingsPage() {
     shopName, 
     ownerName, 
     shopPhone, 
-    shopAddress, 
+    shopAddress,
+    shopGstin,
+    shopEmail,
     taxRate,
     setShopName, 
     setOwnerName, 
     setShopPhone, 
-    setShopAddress, 
+    setShopAddress,
+    setShopGstin,
+    setShopEmail,
     setTaxRate,
     saveAllSettings,
     initialize
@@ -27,6 +31,8 @@ export default function SettingsPage() {
   const [localOwnerName, setLocalOwnerName] = useState(ownerName);
   const [localShopPhone, setLocalShopPhone] = useState(shopPhone);
   const [localShopAddress, setLocalShopAddress] = useState(shopAddress);
+  const [localShopGstin, setLocalShopGstin] = useState(shopGstin);
+  const [localShopEmail, setLocalShopEmail] = useState(shopEmail);
   const [localTaxRate, setLocalTaxRate] = useState(taxRate);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -40,8 +46,10 @@ export default function SettingsPage() {
     setLocalOwnerName(ownerName);
     setLocalShopPhone(shopPhone);
     setLocalShopAddress(shopAddress);
+    setLocalShopGstin(shopGstin);
+    setLocalShopEmail(shopEmail);
     setLocalTaxRate(taxRate);
-  }, [shopName, ownerName, shopPhone, shopAddress, taxRate]);
+  }, [shopName, ownerName, shopPhone, shopAddress, shopGstin, shopEmail, taxRate]);
 
   // Update browser tab title dynamically
   useEffect(() => {
@@ -56,6 +64,8 @@ export default function SettingsPage() {
       setOwnerName(localOwnerName);
       setShopPhone(localShopPhone);
       setShopAddress(localShopAddress);
+      setShopGstin(localShopGstin);
+      setShopEmail(localShopEmail);
       setTaxRate(localTaxRate);
       
       // Then save to API (database)
@@ -139,6 +149,31 @@ export default function SettingsPage() {
               rows={2}
               className="w-full px-4 py-2 rounded-lg border border-slate-200 bg-slate-50 text-base"
             />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium mb-1">GSTIN (Optional)</label>
+            <input
+              type="text"
+              value={localShopGstin}
+              onChange={(e) => setLocalShopGstin(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg border border-slate-200 bg-slate-50 text-base uppercase"
+              placeholder="e.g., 29ABCDE1234F1Z5"
+              maxLength={15}
+            />
+            <p className="text-xs text-slate-500 mt-1">15-character GSTIN for tax invoices</p>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium mb-1">Email (Optional)</label>
+            <input
+              type="email"
+              value={localShopEmail}
+              onChange={(e) => setLocalShopEmail(e.target.value)}
+              className="w-full px-4 py-2 rounded-lg border border-slate-200 bg-slate-50 text-base"
+              placeholder="store@example.com"
+            />
+            <p className="text-xs text-slate-500 mt-1">Email for receipts and communications</p>
           </div>
         </div>
       </div>

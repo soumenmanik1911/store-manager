@@ -10,6 +10,8 @@ export const settings = pgTable('settings', {
   ownerName: varchar('owner_name', { length: 255 }),
   shopPhone: varchar('shop_phone', { length: 50 }),
   shopAddress: text('shop_address'),
+  shopGstin: varchar('shop_gstin', { length: 15 }),
+  shopEmail: varchar('shop_email', { length: 255 }),
   taxRate: decimal('tax_rate', { precision: 5, scale: 2 }).default('0'),
   currency: varchar('currency', { length: 10 }).default('INR'),
   lowStockDefaultThreshold: integer('low_stock_default_threshold').default(50),

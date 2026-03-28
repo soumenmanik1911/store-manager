@@ -6,6 +6,8 @@ interface SettingsState {
   ownerName: string;
   shopPhone: string;
   shopAddress: string;
+  shopGstin: string;
+  shopEmail: string;
   taxRate: number;
   isLoading: boolean;
   error: string | null;
@@ -18,6 +20,8 @@ interface SettingsState {
   setOwnerName: (name: string) => void;
   setShopPhone: (phone: string) => void;
   setShopAddress: (address: string) => void;
+  setShopGstin: (gstin: string) => void;
+  setShopEmail: (email: string) => void;
   setTaxRate: (rate: number) => void;
   saveAllSettings: () => Promise<void>;
 }
@@ -28,6 +32,8 @@ export const useSettingsStore = create<SettingsState>()(
       ownerName: '',
       shopPhone: '',
       shopAddress: '',
+      shopGstin: '',
+      shopEmail: '',
       taxRate: 0,
       isLoading: false,
       error: null,
@@ -42,6 +48,8 @@ export const useSettingsStore = create<SettingsState>()(
             ownerName: settings.ownerName || '',
             shopPhone: settings.shopPhone || '',
             shopAddress: settings.shopAddress || '',
+            shopGstin: settings.shopGstin || '',
+            shopEmail: settings.shopEmail || '',
             taxRate: settings.taxRate || 0,
             isLoading: false,
             lastSyncedAt: new Date(),
@@ -61,6 +69,8 @@ export const useSettingsStore = create<SettingsState>()(
             ownerName: settings.ownerName || '',
             shopPhone: settings.shopPhone || '',
             shopAddress: settings.shopAddress || '',
+            shopGstin: settings.shopGstin || '',
+            shopEmail: settings.shopEmail || '',
             taxRate: settings.taxRate || 0,
             isLoading: false,
             lastSyncedAt: new Date(),
@@ -75,10 +85,12 @@ export const useSettingsStore = create<SettingsState>()(
       setOwnerName: (name) => set({ ownerName: name }),
       setShopPhone: (phone) => set({ shopPhone: phone }),
       setShopAddress: (address) => set({ shopAddress: address }),
+      setShopGstin: (gstin) => set({ shopGstin: gstin }),
+      setShopEmail: (email) => set({ shopEmail: email }),
       setTaxRate: (rate) => set({ taxRate: rate }),
 
       saveAllSettings: async () => {
-        const { shopName, ownerName, shopPhone, shopAddress, taxRate } = get();
+        const { shopName, ownerName, shopPhone, shopAddress, shopGstin, shopEmail, taxRate } = get();
         
         try {
           await storage.saveSettings({
@@ -86,6 +98,8 @@ export const useSettingsStore = create<SettingsState>()(
             ownerName,
             shopPhone,
             shopAddress,
+            shopGstin,
+            shopEmail,
             taxRate,
             currency: 'INR',
             lowStockDefaultThreshold: 50,

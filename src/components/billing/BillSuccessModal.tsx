@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
@@ -7,7 +8,8 @@ import {
   captureReceiptAsBase64, 
   downloadBillImage, 
   shareBillImage, 
-  shareViaWhatsApp 
+  shareViaWhatsApp,
+  downloadBillPDF
 } from '@/lib/generateBillImage';
 import { useToast } from '@/components/Toast';
 import { Check, Download, Share2, MessageCircle, Printer, X, Loader2 } from 'lucide-react';
@@ -30,6 +32,7 @@ export function BillSuccessModal({
   const receiptRef = useRef<HTMLDivElement>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [isWhatsapping, setIsWhatsapping] = useState(false);
   const { addToast } = useToast();
@@ -42,6 +45,7 @@ export function BillSuccessModal({
     if (isOpen) {
       setIsCapturing(false);
       setIsDownloading(false);
+      setIsDownloadingPdf(false);
       setIsSharing(false);
       setIsWhatsapping(false);
     }
@@ -59,6 +63,21 @@ export function BillSuccessModal({
       addToast('error', 'Failed to download bill');
     } finally {
       setIsDownloading(false);
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!receiptRef.current) return;
+    
+    setIsDownloadingPdf(true);
+    try {
+      await downloadBillPDF(receiptRef.current, bill.invoiceNumber);
+      addToast('success', 'PDF downloaded successfully');
+    } catch (error) {
+      console.error('PDF Download error:', error);
+      addToast('error', 'Failed to download PDF. Please install jsPDF: npm install jspdf');
+    } finally {
+      setIsDownloadingPdf(false);
     }
   };
 
@@ -122,7 +141,7 @@ export function BillSuccessModal({
 
   if (!isOpen) return null;
 
-  const isAnyLoading = isDownloading || isSharing || isWhatsapping;
+  const isAnyLoading = isDownloading || isDownloadingPdf || isSharing || isWhatsapping;
 
   return (
     <>
@@ -179,11 +198,25 @@ export function BillSuccessModal({
 
           {/* Action Buttons */}
           <div className="p-4 space-y-3">
-            {/* Download JPG - Primary */}
+            {/* Download PDF - Primary Green */}
+            <button
+              onClick={handleDownloadPdf}
+              disabled={isAnyLoading}
+              className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white py-3 px-4 rounded-xl font-bold transition-colors"
+            >
+              {isDownloadingPdf ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Download className="w-5 h-5" />
+              )}
+              Download PDF
+            </button>
+
+            {/* Download JPG - Outline */}
             <button
               onClick={handleDownload}
               disabled={isAnyLoading}
-              className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white py-3 px-4 rounded-xl font-bold transition-colors"
+              className="w-full flex items-center justify-center gap-2 border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed py-3 px-4 rounded-xl font-bold text-slate-700 transition-colors"
             >
               {isDownloading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -209,7 +242,7 @@ export function BillSuccessModal({
                 Share
               </button>
 
-              {/* WhatsApp */}
+              {/* WhatsApp - Green Outline */}
               <button
                 onClick={handleWhatsApp}
                 disabled={isAnyLoading}
@@ -250,6 +283,10 @@ export function BillSuccessModal({
       {/* Print Styles - Only show receipt when printing */}
       <style jsx global>{`
         @media print {
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
           body * {
             visibility: hidden;
           }
@@ -260,7 +297,8 @@ export function BillSuccessModal({
             position: absolute;
             left: 0;
             top: 0;
-            width: 400px;
+            width: 80mm !important;
+            font-size: 11px !important;
           }
           .no-print {
             display: none !important;

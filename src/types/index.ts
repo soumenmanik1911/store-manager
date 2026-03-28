@@ -101,6 +101,8 @@ export interface Bill {
   paymentMode: PaymentMode;
   cashReceived?: number;
   changeGiven?: number;
+  paidAmount?: number;
+  balanceDue?: number;
   createdAt: string;
   status: 'paid' | 'pending' | 'cancelled';
 }
@@ -111,6 +113,8 @@ export interface StoreSettings {
   ownerName: string;
   shopAddress?: string;
   shopPhone?: string;
+  shopGstin?: string;
+  shopEmail?: string;
   taxRate: number;
   currency: string;
   lowStockDefaultThreshold: number;

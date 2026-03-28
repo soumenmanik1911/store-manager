@@ -8,7 +8,7 @@ import { formatCurrency, formatDate, formatDateTime, toNumber } from '@/lib/util
 import { Search, Calendar, Filter, Receipt, ChevronRight, X, Printer, Download, Share2, MessageCircle, Loader2 } from 'lucide-react';
 import { Bill, StoreSettings } from '@/types';
 import { BillReceipt } from '@/components/billing/BillReceipt';
-import { downloadBillImage, shareBillImage, shareViaWhatsApp } from '@/lib/generateBillImage';
+import { downloadBillImage, shareBillImage, shareViaWhatsApp, downloadBillPDF } from '@/lib/generateBillImage';
 
 export default function HistoryPage() {
   const { bills, initializeFromStorage } = useBillStore();
@@ -22,6 +22,7 @@ export default function HistoryPage() {
   
   // Download/Share states
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [isWhatsapping, setIsWhatsapping] = useState(false);
   const receiptRef = useRef<HTMLDivElement>(null);
@@ -32,6 +33,8 @@ export default function HistoryPage() {
     ownerName: '',
     shopPhone: 'N/A',
     shopAddress: 'N/A',
+    shopGstin: '',
+    shopEmail: '',
     taxRate: 0,
     currency: 'INR',
     lowStockDefaultThreshold: 50,
@@ -44,6 +47,8 @@ export default function HistoryPage() {
       ownerName: '',
       shopPhone: shopPhone || 'N/A',
       shopAddress: shopAddress || 'N/A',
+      shopGstin: '',
+      shopEmail: '',
       taxRate: taxRate || 0,
       currency: 'INR',
       lowStockDefaultThreshold: 50,
@@ -129,6 +134,21 @@ export default function HistoryPage() {
     }
   };
 
+  const handleDownloadPdf = async () => {
+    if (!receiptRef.current || !selectedBill) return;
+    
+    setIsDownloadingPdf(true);
+    try {
+      await downloadBillPDF(receiptRef.current, selectedBill.invoiceNumber);
+      addToast('success', 'PDF downloaded successfully');
+    } catch (error) {
+      console.error('PDF Download error:', error);
+      addToast('error', 'Failed to download PDF');
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
   const handleShare = async () => {
     if (!receiptRef.current || !selectedBill) return;
     
@@ -175,11 +195,12 @@ export default function HistoryPage() {
   const handleCloseModal = () => {
     setSelectedBill(null);
     setIsDownloading(false);
+    setIsDownloadingPdf(false);
     setIsSharing(false);
     setIsWhatsapping(false);
   };
 
-  const isAnyLoading = isDownloading || isSharing || isWhatsapping;
+  const isAnyLoading = isDownloading || isDownloadingPdf || isSharing || isWhatsapping;
 
   if (isLoading) {
     return (
@@ -369,11 +390,25 @@ export default function HistoryPage() {
             </div>
 
             <div className="p-6 space-y-3">
-              {/* Download JPG - Primary */}
+              {/* Download PDF - Primary Green */}
+              <button
+                onClick={handleDownloadPdf}
+                disabled={isAnyLoading}
+                className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white py-3 px-4 rounded-xl font-bold transition-colors"
+              >
+                {isDownloadingPdf ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Download className="w-5 h-5" />
+                )}
+                Download PDF
+              </button>
+
+              {/* Download JPG - Outline */}
               <button
                 onClick={handleDownload}
                 disabled={isAnyLoading}
-                className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white py-3 px-4 rounded-xl font-bold transition-colors"
+                className="w-full flex items-center justify-center gap-2 border-2 border-slate-200 hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed py-3 px-4 rounded-xl font-bold text-slate-700 transition-colors"
               >
                 {isDownloading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
